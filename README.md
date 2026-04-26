@@ -1,49 +1,61 @@
-# Sisyphus
+# Sisyphus（西西弗斯）
 
-A high-performance AI agent framework written in Go, following Linux standards.
+高性能 AI Agent 框架，Go 语言编写，跨平台支持 Windows 和 Linux。
 
-> *Sisyphus, from Greek mythology, eternally pushes a boulder up a hill — never stopping, never giving up. This agent embodies the same relentless execution loop.*
+> *西西弗斯，希腊神话中永不停歇推石上山的人物。这个 agent 继承了同样的精神——每一步都在推进任务，即使失败也会重试、适应，直至工作完成。*
 
-## Quick Start
+## 快速开始
 
 ```bash
-# Build
-make build
+# 编译
+go build -o bin/sisyphus ./cmd/sisyphus
 
-# Set your API key
+# 设置 API 密钥
+# Linux/macOS:
 export OPENAI_API_KEY="sk-..."
+# Windows (PowerShell):
+$env:OPENAI_API_KEY="sk-..."
 
-# Run a task
-./bin/sisyphus --instruction "List all Go files in the current directory"
+# 运行任务
+./bin/sisyphus --instruction "列出当前目录下所有 Go 文件"
 ```
 
-## Architecture
+> **提示**：不使用 `make` 也可以直接 `go build`，因为 Makefile 在 Windows 上需要额外安装。项目提供 Makefile 给 Linux 用户带来便利，同时也提供等效的 PowerShell 脚本。
+
+## 架构
 
 ```
   ┌──────────────────────────────────────────┐
-  │              Agent Loop                    │
+  │              Agent 执行循环                │
   │                                            │
-  │  Task ─► Perceive ─► Think ─► Act ─► Loop │
-  │              │          │        │         │
-  │          Memory      LLM      Tools        │
+  │  任务 ─► 感知 ─► 思考 ─► 行动 ─► 循环     │
+  │            │        │         │            │
+  │          记忆库   大模型     工具集         │
   └──────────────────────────────────────────┘
 ```
 
-- **Agent** (`internal/agent/`): The core execute loop — `perceive → think → act`
-- **LLM** (`internal/llm/`): Pluggable LLM provider interface; ships with OpenAI-compatible backend
-- **Tools** (`internal/tool/`): Extensible tool system with built-in `bash`, `read_file`, `write_file`, `web_search`
-- **Memory** (`internal/memory/`): Token-aware conversation history with automatic trimming
-- **Task** (`internal/task/`): Async task queue with worker pool and priority support
+- **Agent**（`internal/agent/`）：核心执行循环 —— 感知 → 思考 → 行动
+- **LLM**（`internal/llm/`）：可插拔的大模型接口，首发 OpenAI 兼容后端（同时支持 DeepSeek、vLLM 等）
+- **Tools**（`internal/tool/`）：可扩展的工具系统，内置 `bash`、`read_file`、`write_file`、`web_search`
+- **Memory**（`internal/memory/`）：基于 token 计数的对话历史管理，自动裁剪超出的上下文
+- **Task**（`internal/task/`）：异步任务队列，支持 worker pool 并发消费
 
-## Configuration
+## 配置
 
-Sisyphus searches for configuration in XDG-compliant paths:
-1. `$SISYPHUS_CONFIG` (explicit override)
+Sisyphus 按以下顺序搜索配置文件（自动适配操作系统）：
+
+### Linux / macOS
+1. `$SISYPHUS_CONFIG`（显式指定）
 2. `$XDG_CONFIG_HOME/sisyphus/config.yaml`
 3. `~/.config/sisyphus/config.yaml`
 4. `/etc/sisyphus/config.yaml`
 
-Example `~/.config/sisyphus/config.yaml`:
+### Windows
+1. `%SISYPHUS_CONFIG%`（显式指定）
+2. `%APPDATA%/sisyphus/config.yaml`
+3. `%ProgramData%/sisyphus/config.yaml`
+
+配置示例 `config.yaml`：
 
 ```yaml
 llm:
@@ -51,61 +63,83 @@ llm:
   model: gpt-4o
   max_tokens: 4096
   temperature: 0.0
-  # api_key: sk-...  # prefer $OPENAI_API_KEY
+  # api_key: sk-...  # 推荐使用环境变量 OPENAI_API_KEY
 
 agent:
-  max_steps: 50
-  max_concurrent: 4
+  max_steps: 50        # 每个任务最大步数
+  max_concurrent: 4    # 最大并发 agent 数
 
 queue:
-  size: 256
-  workers: 2
+  size: 256            # 队列缓冲大小
+  workers: 2           # worker goroutine 数量
 
 memory:
-  max_messages: 100
-  max_tokens: 128000
+  max_messages: 100    # 保留的最大消息数
+  max_tokens: 128000   # 保留的最大 token 数
 ```
 
-## Environment Variables
+## 环境变量
 
-| Variable | Description |
+| 变量 | 说明 |
 |---|---|
-| `OPENAI_API_KEY` | LLM API key |
-| `SISYPHUS_CONFIG` | Config file path override |
-| `SISYPHUS_MODEL` | Model name override |
-| `SISYPHUS_MAX_STEPS` | Max steps per task (default: 50) |
-| `SISYPHUS_WORKERS` | Number of workers (default: 2) |
+| `OPENAI_API_KEY` | LLM API 密钥 |
+| `SISYPHUS_CONFIG` | 配置文件路径（覆盖默认搜索路径） |
+| `SISYPHUS_MODEL` | 模型名称覆盖 |
+| `SISYPHUS_MAX_STEPS` | 每任务最大步数（默认 50） |
+| `SISYPHUS_WORKERS` | worker 数量（默认 2） |
 
-## Build
+## 编译
 
-```makefile
-make build    # Build binary → bin/sisyphus
-make release  # Optimized build (stripped)
-make test     # Run tests with race detection
-make vet      # Run go vet
-make lint     # vet + staticcheck
-make install  # Install to /usr/local/bin
-make clean    # Remove build artifacts
+Linux：
+
+```bash
+make build       # 编译 → bin/sisyphus
+make release     # 生产优化编译（去除调试符号）
+make test        # 运行测试（带竞态检测）
+make vet         # 运行 go vet
+make install     # 安装到 /usr/local/bin
+make clean       # 清理编译产物
 ```
 
-## Linux Standards
+Windows（PowerShell）：
 
-| Standard | Implementation |
-|---|---|
-| **FHS config** | `~/.config/sisyphus/`, `/etc/sisyphus/` |
-| **FHS data** | `~/.local/share/sisyphus/` |
-| **Signals** | SIGTERM/SIGINT → graceful shutdown |
-| **Logging** | stdout/stderr (systemd journal compatible) |
-| **Exit codes** | 0 on success, 1 on error |
-| **Daemon-ready** | signal-driven lifecycle, no daemonize() needed with systemd |
+```powershell
+# 编译
+go build -o bin/sisyphus.exe ./cmd/sisyphus
 
-## Performance
+# 运行测试
+go test -race ./...
 
-- Goroutine pool with bounded concurrency via channel-based worker pool
-- `json.RawMessage` for zero-copy tool argument passing
-- Context-based deadline propagation to all LLM and tool calls
-- Token-count-based memory trimming to prevent context overflow
-- `sync.Pool` ready (to be added for hot-path allocation optimization)
+# 代码检查
+go vet ./...
+```
+
+通用（Go 跨平台编译）：
+
+```bash
+# 编译 Linux 版本
+GOOS=linux GOARCH=amd64 go build -o bin/sisyphus ./cmd/sisyphus
+
+# 编译 Windows 版本
+GOOS=windows GOARCH=amd64 go build -o bin/sisyphus.exe ./cmd/sisyphus
+```
+
+## 跨平台设计
+
+| 特性 | Linux/macOS | Windows |
+|---|---|---|
+| Shell 执行 | `sh -c` | `cmd /c` |
+| 配置路径 | XDG 标准 | `%APPDATA%` / `%ProgramData%` |
+| 信号处理 | SIGTERM/SIGINT | os.Interrupt |
+| 路径分隔 | `/` | `\`（Go `filepath` 自动处理） |
+
+## 高性能设计
+
+- 有界 channel 实现 goroutine pool，控制并发
+- `json.RawMessage` 零拷贝传递工具参数
+- context 全链路传递超时和取消信号
+- 基于 tiktoken 精确计数的记忆裁剪，防止上下文溢出
+- `sync.Pool` 预留接口（热路径内存分配优化待加入）
 
 ## License
 

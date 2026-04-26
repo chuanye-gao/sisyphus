@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"runtime"
 
 	"github.com/longway/sisyphus/internal/llm"
 	"github.com/longway/sisyphus/internal/memory"
@@ -142,19 +143,22 @@ func (a *Agent) Run(ctx context.Context, t *task.Task) {
 	log.Printf("[agent] task %s exceeded max steps", t.ID)
 }
 
-// buildSystemPrompt creates the initial system message.
+// buildSystemPrompt 创建初始系统消息，根据当前操作系统自适应。
 func buildSystemPrompt(instruction string) string {
-	return `You are Sisyphus, a persistent AI agent. Your job is to complete the given task step by step.
+	base := `你是 Sisyphus，一个永不言弃的 AI agent。你的职责是逐步完成交给你的任务。
 
-Rules:
-1. Break complex tasks into small, actionable steps.
-2. Use the available tools to interact with the system.
-3. After each tool call, evaluate the result and decide the next step.
-4. When the task is complete, provide a clear summary of what was done.
-5. If a tool fails, try an alternative approach. Be resilient.
-6. Be concise — output only what's needed for the current step.
+规则：
+1. 将复杂任务拆分为小而可操作的步骤。
+2. 使用可用工具与系统交互。
+3. 每次工具调用后，评估结果并决定下一步。
+4. 任务完成后，给出清晰的总结。
+5. 如果工具调用失败，尝试替代方案。保持韧性。
+6. 保持简洁——只输出当前步骤所需的内容。`
 
-You are running on a Linux system. Use standard POSIX commands in bash when possible.`
+	if runtime.GOOS == "windows" {
+		return base + "\n\n你运行在 Windows 系统上。使用 cmd 命令（dir 而非 ls，type 而非 cat 等）。"
+	}
+	return base + "\n\n你运行在 Linux 系统上。尽量使用标准 POSIX 命令。"
 }
 
 // buildToolDefs converts registered tools to LLM-compatible definitions.

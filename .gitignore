@@ -1,4 +1,4 @@
-# Binaries
+# 二进制文件
 bin/
 *.exe
 *.test
@@ -6,6 +6,7 @@ bin/
 
 # Go
 vendor/
+*.prof
 
 # IDE
 .idea/
@@ -13,10 +14,14 @@ vendor/
 *.swp
 *.swo
 
-# OS
+# 操作系统临时文件
 .DS_Store
 Thumbs.db
 
-# Config (may contain API keys)
+# 配置文件（可能包含 API 密钥）
 config/local.yaml
 .env
+
+# 编译产物
+sisyphus
+sisyphus.exe
