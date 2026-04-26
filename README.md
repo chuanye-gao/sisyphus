@@ -57,6 +57,9 @@ Sisyphus 按以下顺序搜索配置文件（自动适配操作系统）：
 
 配置示例 `config.yaml`：
 
+
+仓库根目录提供了一个可维护的 `config.yaml` 模板（包含 `llm.base_url`、`llm.api_key`、`mcp_servers`，且不包含 `skills`）。可直接复制到系统配置路径，或通过 `SISYPHUS_CONFIG` 指向该文件。
+
 ```yaml
 llm:
   provider: openai

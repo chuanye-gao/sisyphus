@@ -1,0 +1,59 @@
+# Sisyphus external configuration template.
+# Copy this file to ~/.config/sisyphus/config.yaml (Linux/macOS)
+# or %APPDATA%/sisyphus/config.yaml (Windows),
+# or set SISYPHUS_CONFIG to point to this file.
+
+llm:
+  provider: openai
+  model: gpt-4o
+  base_url: https://api.openai.com/v1
+  api_key: ${OPENAI_API_KEY}
+  max_tokens: 4096
+  temperature: 0.0
+  timeout: 120
+
+agent:
+  max_steps: 50
+  max_concurrent: 4
+
+queue:
+  size: 256
+  workers: 2
+
+memory:
+  max_messages: 100
+  max_tokens: 128000
+
+# No skills are defined here by design.
+# Use MCP servers for external capability integration.
+mcp_servers:
+  - name: filesystem
+    command: npx
+    args:
+      - -y
+      - '@modelcontextprotocol/server-filesystem'
+      - /workspace
+    env: {}
+    timeout_seconds: 30
+
+  - name: github
+    command: npx
+    args:
+      - -y
+      - '@modelcontextprotocol/server-github'
+    env:
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+    timeout_seconds: 30
+
+tools:
+  bash:
+    timeout_seconds: 10
+  web_search:
+    provider: tavily
+    endpoint: https://api.tavily.com/search
+    api_key: ${TAVILY_API_KEY}
+    timeout_seconds: 15
+    default_max_results: 5
+    max_results_limit: 10
+
+log_level: info
