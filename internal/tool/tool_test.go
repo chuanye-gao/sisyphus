@@ -13,7 +13,7 @@ type fakeTool struct {
 	value string
 }
 
-func (f fakeTool) Name() string               { return f.name }
+func (f fakeTool) Name() string                { return f.name }
 func (f fakeTool) Description() string         { return f.desc }
 func (f fakeTool) Parameters() json.RawMessage { return json.RawMessage(`{"type":"object"}`) }
 func (f fakeTool) Execute(_ context.Context, args json.RawMessage) (string, error) {

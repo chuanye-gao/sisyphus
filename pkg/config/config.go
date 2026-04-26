@@ -38,13 +38,13 @@ type AgentConfig struct {
 
 // LLMConfig 配置大模型服务。
 type LLMConfig struct {
-	Provider    string  `yaml:"provider"`     // "openai"
-	APIKey      string  `yaml:"api_key"`      // 或使用环境变量 $OPENAI_API_KEY
-	BaseURL     string  `yaml:"base_url"`     // 可选，用于兼容 API（如 DeepSeek）
+	Provider    string  `yaml:"provider"` // "openai"
+	APIKey      string  `yaml:"api_key"`  // 或使用环境变量 $OPENAI_API_KEY
+	BaseURL     string  `yaml:"base_url"` // 可选，用于兼容 API（如 DeepSeek）
 	Model       string  `yaml:"model"`
 	MaxTokens   int     `yaml:"max_tokens"`
 	Temperature float64 `yaml:"temperature"`
-	Timeout     int     `yaml:"timeout"`      // 秒
+	Timeout     int     `yaml:"timeout"` // 秒
 }
 
 // MemoryConfig 控制 agent 记忆。
