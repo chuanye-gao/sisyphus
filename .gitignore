@@ -1,0 +1,22 @@
+# Binaries
+bin/
+*.exe
+*.test
+*.out
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config (may contain API keys)
+config/local.yaml
+.env
