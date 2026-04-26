@@ -76,6 +76,17 @@ queue:
 memory:
   max_messages: 100    # 保留的最大消息数
   max_tokens: 128000   # 保留的最大 token 数
+
+tools:
+  bash:
+    timeout_seconds: 10
+  web_search:
+    provider: tavily
+    endpoint: https://api.tavily.com/search
+    timeout_seconds: 15
+    default_max_results: 5
+    max_results_limit: 10
+    # api_key: tvly-... # 推荐使用环境变量 TAVILY_API_KEY
 ```
 
 ## 环境变量
@@ -87,6 +98,9 @@ memory:
 | `SISYPHUS_MODEL` | 模型名称覆盖 |
 | `SISYPHUS_MAX_STEPS` | 每任务最大步数（默认 50） |
 | `SISYPHUS_WORKERS` | worker 数量（默认 2） |
+| `SISYPHUS_BASH_TIMEOUT` | bash 工具超时（秒） |
+| `SISYPHUS_WEB_SEARCH_ENDPOINT` | web_search API 地址覆盖 |
+| `TAVILY_API_KEY` | web_search（Tavily）密钥 |
 
 ## 编译
 

@@ -27,6 +27,7 @@ type Config struct {
 	LLM      LLMConfig    `yaml:"llm"`
 	Memory   MemoryConfig `yaml:"memory"`
 	Queue    QueueConfig  `yaml:"queue"`
+	Tools    ToolsConfig  `yaml:"tools"`
 	LogLevel string       `yaml:"log_level"`
 }
 
@@ -38,13 +39,13 @@ type AgentConfig struct {
 
 // LLMConfig 配置大模型服务。
 type LLMConfig struct {
-	Provider    string  `yaml:"provider"`     // "openai"
-	APIKey      string  `yaml:"api_key"`      // 或使用环境变量 $OPENAI_API_KEY
-	BaseURL     string  `yaml:"base_url"`     // 可选，用于兼容 API（如 DeepSeek）
+	Provider    string  `yaml:"provider"` // "openai"
+	APIKey      string  `yaml:"api_key"`  // 或使用环境变量 $OPENAI_API_KEY
+	BaseURL     string  `yaml:"base_url"` // 可选，用于兼容 API（如 DeepSeek）
 	Model       string  `yaml:"model"`
 	MaxTokens   int     `yaml:"max_tokens"`
 	Temperature float64 `yaml:"temperature"`
-	Timeout     int     `yaml:"timeout"`      // 秒
+	Timeout     int     `yaml:"timeout"` // 秒
 }
 
 // MemoryConfig 控制 agent 记忆。
@@ -57,6 +58,27 @@ type MemoryConfig struct {
 type QueueConfig struct {
 	Size    int `yaml:"size"`    // 队列缓冲区大小
 	Workers int `yaml:"workers"` // worker goroutine 数量
+}
+
+// ToolsConfig 控制内置工具行为，避免在代码里写死个人参数。
+type ToolsConfig struct {
+	Bash      BashToolConfig      `yaml:"bash"`
+	WebSearch WebSearchToolConfig `yaml:"web_search"`
+}
+
+// BashToolConfig 控制 bash 工具执行超时。
+type BashToolConfig struct {
+	TimeoutSeconds int `yaml:"timeout_seconds"`
+}
+
+// WebSearchToolConfig 控制网络搜索工具行为。
+type WebSearchToolConfig struct {
+	Provider          string `yaml:"provider"`            // 目前支持 "tavily"
+	APIKey            string `yaml:"api_key"`             // 可选，推荐环境变量
+	Endpoint          string `yaml:"endpoint"`            // Tavily API 地址
+	TimeoutSeconds    int    `yaml:"timeout_seconds"`     // HTTP 超时（秒）
+	DefaultMaxResults int    `yaml:"default_max_results"` // 默认返回数量
+	MaxResultsLimit   int    `yaml:"max_results_limit"`   // 最大允许数量
 }
 
 // DefaultConfig 返回一份带有合理默认值的配置。
@@ -80,6 +102,18 @@ func DefaultConfig() *Config {
 		Queue: QueueConfig{
 			Size:    256,
 			Workers: 2,
+		},
+		Tools: ToolsConfig{
+			Bash: BashToolConfig{
+				TimeoutSeconds: 10,
+			},
+			WebSearch: WebSearchToolConfig{
+				Provider:          "tavily",
+				Endpoint:          "https://api.tavily.com/search",
+				TimeoutSeconds:    15,
+				DefaultMaxResults: 5,
+				MaxResultsLimit:   10,
+			},
 		},
 		LogLevel: "info",
 	}
@@ -187,6 +221,18 @@ func applyEnvOverrides(cfg *Config) {
 		if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
 			cfg.Queue.Workers = n
 		}
+	}
+	if v := os.Getenv("SISYPHUS_BASH_TIMEOUT"); v != "" {
+		var n int
+		if _, err := fmt.Sscanf(v, "%d", &n); err == nil && n > 0 {
+			cfg.Tools.Bash.TimeoutSeconds = n
+		}
+	}
+	if v := os.Getenv("TAVILY_API_KEY"); v != "" && cfg.Tools.WebSearch.APIKey == "" {
+		cfg.Tools.WebSearch.APIKey = v
+	}
+	if v := os.Getenv("SISYPHUS_WEB_SEARCH_ENDPOINT"); v != "" {
+		cfg.Tools.WebSearch.Endpoint = v
 	}
 }
 

@@ -180,9 +180,8 @@ func buildToolDefs(registry *tool.Registry) []llm.ToolDef {
 
 // RunTask is a convenience function that runs a single task synchronously.
 // It creates an ephemeral memory that is discarded after execution.
-func RunTask(ctx context.Context, provider llm.Provider, registry *tool.Registry, t *task.Task, maxSteps int) {
-	cfg := config.MemoryConfig{MaxMessages: 100, MaxTokens: 128000}
-	mem, err := memory.New(cfg, "")
+func RunTask(ctx context.Context, provider llm.Provider, registry *tool.Registry, t *task.Task, maxSteps int, memCfg config.MemoryConfig) {
+	mem, err := memory.New(memCfg, "")
 	if err != nil {
 		t.SetError(fmt.Errorf("agent: create memory: %w", err), 0)
 		return

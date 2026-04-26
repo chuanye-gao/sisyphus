@@ -19,6 +19,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Queue.Workers != 2 {
 		t.Errorf("默认 Workers 应为 2，实际 %d", cfg.Queue.Workers)
 	}
+	if cfg.Tools.Bash.TimeoutSeconds != 10 {
+		t.Errorf("默认 Bash timeout 应为 10，实际 %d", cfg.Tools.Bash.TimeoutSeconds)
+	}
+	if cfg.Tools.WebSearch.Endpoint == "" {
+		t.Error("默认 WebSearch endpoint 不应为空")
+	}
 }
 
 func TestLoadDefaults(t *testing.T) {
@@ -38,9 +44,13 @@ func TestLoadDefaults(t *testing.T) {
 func TestEnvOverrides(t *testing.T) {
 	os.Setenv("SISYPHUS_MAX_STEPS", "10")
 	os.Setenv("SISYPHUS_WORKERS", "4")
+	os.Setenv("SISYPHUS_BASH_TIMEOUT", "20")
+	os.Setenv("SISYPHUS_WEB_SEARCH_ENDPOINT", "https://example.com/search")
 	defer func() {
 		os.Unsetenv("SISYPHUS_MAX_STEPS")
 		os.Unsetenv("SISYPHUS_WORKERS")
+		os.Unsetenv("SISYPHUS_BASH_TIMEOUT")
+		os.Unsetenv("SISYPHUS_WEB_SEARCH_ENDPOINT")
 	}()
 
 	cfg, err := Load()
@@ -52,6 +62,12 @@ func TestEnvOverrides(t *testing.T) {
 	}
 	if cfg.Queue.Workers != 4 {
 		t.Errorf("env 覆盖 Workers 应为 4，实际 %d", cfg.Queue.Workers)
+	}
+	if cfg.Tools.Bash.TimeoutSeconds != 20 {
+		t.Errorf("env 覆盖 bash timeout 应为 20，实际 %d", cfg.Tools.Bash.TimeoutSeconds)
+	}
+	if cfg.Tools.WebSearch.Endpoint != "https://example.com/search" {
+		t.Errorf("env 覆盖 web_search endpoint 失败，实际 %s", cfg.Tools.WebSearch.Endpoint)
 	}
 }
 
@@ -68,7 +84,9 @@ func TestDataDir(t *testing.T) {
 
 func TestLoadWithAPIKey(t *testing.T) {
 	os.Setenv("OPENAI_API_KEY", "sk-test123")
+	os.Setenv("TAVILY_API_KEY", "tv-test123")
 	defer os.Unsetenv("OPENAI_API_KEY")
+	defer os.Unsetenv("TAVILY_API_KEY")
 
 	cfg, err := Load()
 	if err != nil {
@@ -76,6 +94,9 @@ func TestLoadWithAPIKey(t *testing.T) {
 	}
 	if cfg.LLM.APIKey != "sk-test123" {
 		t.Errorf("期望 APIKey 为 sk-test123，实际 '%s'", cfg.LLM.APIKey)
+	}
+	if cfg.Tools.WebSearch.APIKey != "tv-test123" {
+		t.Errorf("期望 Tavily APIKey 为 tv-test123，实际 '%s'", cfg.Tools.WebSearch.APIKey)
 	}
 }
 

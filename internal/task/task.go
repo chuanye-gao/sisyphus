@@ -11,11 +11,11 @@ import (
 type TaskStatus string
 
 const (
-	StatusPending    TaskStatus = "pending"
-	StatusRunning    TaskStatus = "running"
-	StatusCompleted  TaskStatus = "completed"
-	StatusFailed     TaskStatus = "failed"
-	StatusCancelled  TaskStatus = "cancelled"
+	StatusPending   TaskStatus = "pending"
+	StatusRunning   TaskStatus = "running"
+	StatusCompleted TaskStatus = "completed"
+	StatusFailed    TaskStatus = "failed"
+	StatusCancelled TaskStatus = "cancelled"
 )
 
 // Task represents a unit of work for the agent.

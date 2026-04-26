@@ -12,10 +12,12 @@
 // Environment:
 //
 //	OPENAI_API_KEY        LLM API key (required)
+//	TAVILY_API_KEY        Tavily web search API key (optional if tools.web_search.api_key is set)
 //	SISYPHUS_CONFIG       Config file path
 //	SISYPHUS_MODEL        Model name override
 //	SISYPHUS_MAX_STEPS    Max steps per task
 //	SISYPHUS_WORKERS      Number of worker goroutines
+//	SISYPHUS_BASH_TIMEOUT Bash tool timeout (seconds)
 //
 // Signals:
 //
@@ -85,14 +87,14 @@ func main() {
 	})
 
 	registry := tool.NewRegistry()
-	registerBuiltins(registry)
+	registerBuiltins(registry, cfg)
 
 	// Create task queue
 	queue := task.NewQueue(cfg.Queue.Size)
 
 	// Launch workers
 	for i := 0; i < cfg.Queue.Workers; i++ {
-		go worker(ctx, i, provider, registry, cfg.Agent.MaxSteps, queue)
+		go worker(ctx, i, provider, registry, cfg.Agent.MaxSteps, cfg.Memory, queue)
 	}
 
 	// Single-shot mode: submit the instruction as a task
@@ -137,22 +139,29 @@ func main() {
 }
 
 // worker processes tasks from the queue.
-func worker(ctx context.Context, id int, provider llm.Provider, registry *tool.Registry, maxSteps int, queue *task.Queue) {
+func worker(ctx context.Context, id int, provider llm.Provider, registry *tool.Registry, maxSteps int, memCfg config.MemoryConfig, queue *task.Queue) {
 	log.Printf("sisyphus: worker %d started", id)
 	for t := range queue.Chan() {
 		queue.Track(t)
-		agent.RunTask(ctx, provider, registry, t, maxSteps)
+		agent.RunTask(ctx, provider, registry, t, maxSteps, memCfg)
 		queue.Untrack(t)
 	}
 	log.Printf("sisyphus: worker %d stopped", id)
 }
 
 // registerBuiltins registers the standard built-in tools.
-func registerBuiltins(r *tool.Registry) {
-	r.Register(builtin.BashTool{})
-	r.Register(builtin.ReadFileTool{})
-	r.Register(builtin.WriteFileTool{})
-	r.Register(builtin.WebSearchTool{})
+func registerBuiltins(r *tool.Registry, cfg *config.Config) {
+	bashTool := builtin.NewBashTool(cfg.Tools.Bash.TimeoutSeconds)
+	r.Register(bashTool)
+	r.Register(builtin.NewReadFileTool(bashTool))
+	r.Register(builtin.NewWriteFileTool(bashTool))
+	r.Register(builtin.NewWebSearchTool(
+		cfg.Tools.WebSearch.APIKey,
+		cfg.Tools.WebSearch.Endpoint,
+		cfg.Tools.WebSearch.TimeoutSeconds,
+		cfg.Tools.WebSearch.DefaultMaxResults,
+		cfg.Tools.WebSearch.MaxResultsLimit,
+	))
 }
 
 var taskCounter int
