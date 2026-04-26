@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBashToolName(t *testing.T) {
@@ -119,6 +120,26 @@ func TestWebSearchToolNoAPIKey(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "TAVILY_API_KEY") {
 		t.Errorf("错误应提到 TAVILY_API_KEY: %v", err)
+	}
+}
+
+func TestNewBashToolDefaultTimeout(t *testing.T) {
+	bt := NewBashTool(0)
+	if bt.Timeout != 10*time.Second {
+		t.Fatalf("默认超时应为 10s，实际 %v", bt.Timeout)
+	}
+}
+
+func TestNewWebSearchToolDefaults(t *testing.T) {
+	wst := NewWebSearchTool("", "", 0, 0, 0)
+	if wst.Endpoint == "" {
+		t.Fatal("默认 endpoint 不应为空")
+	}
+	if wst.HTTPTimeout != 15*time.Second {
+		t.Fatalf("默认 HTTP timeout 应为 15s，实际 %v", wst.HTTPTimeout)
+	}
+	if wst.DefaultMaxResults != 5 || wst.MaxResultsLimit != 10 {
+		t.Fatalf("默认结果限制异常: default=%d limit=%d", wst.DefaultMaxResults, wst.MaxResultsLimit)
 	}
 }
 

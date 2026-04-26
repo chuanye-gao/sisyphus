@@ -25,8 +25,24 @@ func shellCommand() (shell string, flag string) {
 	return "sh", "-c"
 }
 
-// BashTool executes shell commands.
-type BashTool struct{}
+const (
+	defaultBashTimeoutSeconds       = 10
+	defaultWebSearchTimeoutSeconds  = 15
+	defaultWebSearchMaxResults      = 5
+	defaultWebSearchMaxResultsLimit = 10
+	defaultWebSearchEndpoint        = "https://api.tavily.com/search"
+)
+
+type BashTool struct {
+	Timeout time.Duration
+}
+
+func NewBashTool(timeoutSeconds int) BashTool {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = defaultBashTimeoutSeconds
+	}
+	return BashTool{Timeout: time.Duration(timeoutSeconds) * time.Second}
+}
 
 // compile-time check
 var _ interface {
@@ -57,7 +73,7 @@ func (BashTool) Parameters() json.RawMessage {
 	}`)
 }
 
-func (BashTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+func (t BashTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
 	var params struct {
 		Command string `json:"command"`
 	}
@@ -68,8 +84,12 @@ func (BashTool) Execute(ctx context.Context, args json.RawMessage) (string, erro
 		return "", fmt.Errorf("bash: 命令为空")
 	}
 
-	// 10 second timeout per command
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	timeout := t.Timeout
+	if timeout <= 0 {
+		timeout = defaultBashTimeoutSeconds * time.Second
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	shell, flag := shellCommand()
@@ -85,8 +105,13 @@ func (BashTool) Execute(ctx context.Context, args json.RawMessage) (string, erro
 	return strings.TrimSpace(string(out)), nil
 }
 
-// ReadFileTool 读取文件内容。
-type ReadFileTool struct{}
+type ReadFileTool struct {
+	Bash BashTool
+}
+
+func NewReadFileTool(bash BashTool) ReadFileTool {
+	return ReadFileTool{Bash: bash}
+}
 
 func (ReadFileTool) Name() string { return "read_file" }
 
@@ -115,7 +140,7 @@ func (t ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (string
 		return "", fmt.Errorf("read_file: 参数解析失败: %w", err)
 	}
 	// 通过 bash/cmd 执行，保证跨平台一致
-	bt := BashTool{}
+	bt := t.Bash
 	var cmd string
 	if runtime.GOOS == "windows" {
 		cmd = fmt.Sprintf("type %s", params.Path)
@@ -125,8 +150,13 @@ func (t ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (string
 	return bt.Execute(ctx, json.RawMessage(fmt.Sprintf(`{"command": "%s"}`, cmd)))
 }
 
-// WriteFileTool 写入内容到文件。
-type WriteFileTool struct{}
+type WriteFileTool struct {
+	Bash BashTool
+}
+
+func NewWriteFileTool(bash BashTool) WriteFileTool {
+	return WriteFileTool{Bash: bash}
+}
 
 func (WriteFileTool) Name() string { return "write_file" }
 
@@ -160,7 +190,7 @@ func (t WriteFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 		return "", fmt.Errorf("write_file: 参数解析失败: %w", err)
 	}
 
-	bt := BashTool{}
+	bt := t.Bash
 	var cmd string
 	if runtime.GOOS == "windows" {
 		// Windows: 创建目录 + 写入文件
@@ -176,7 +206,39 @@ func (t WriteFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 // WebSearchTool 使用 Tavily API 执行网络搜索。
 // Tavily 是专为 AI agent 设计的搜索引擎，返回结构化结果。
 // API 密钥通过环境变量 TAVILY_API_KEY 提供。
-type WebSearchTool struct{}
+type WebSearchTool struct {
+	APIKey            string
+	Endpoint          string
+	HTTPTimeout       time.Duration
+	DefaultMaxResults int
+	MaxResultsLimit   int
+}
+
+func NewWebSearchTool(apiKey, endpoint string, timeoutSeconds, defaultMaxResults, maxResultsLimit int) WebSearchTool {
+	if endpoint == "" {
+		endpoint = defaultWebSearchEndpoint
+	}
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = defaultWebSearchTimeoutSeconds
+	}
+	if defaultMaxResults <= 0 {
+		defaultMaxResults = defaultWebSearchMaxResults
+	}
+	if maxResultsLimit <= 0 {
+		maxResultsLimit = defaultWebSearchMaxResultsLimit
+	}
+	if defaultMaxResults > maxResultsLimit {
+		defaultMaxResults = maxResultsLimit
+	}
+
+	return WebSearchTool{
+		APIKey:            apiKey,
+		Endpoint:          endpoint,
+		HTTPTimeout:       time.Duration(timeoutSeconds) * time.Second,
+		DefaultMaxResults: defaultMaxResults,
+		MaxResultsLimit:   maxResultsLimit,
+	}
+}
 
 func (WebSearchTool) Name() string { return "web_search" }
 
@@ -212,23 +274,47 @@ func (t WebSearchTool) Execute(ctx context.Context, args json.RawMessage) (strin
 	if params.Query == "" {
 		return "", fmt.Errorf("web_search: 搜索关键词为空")
 	}
-	if params.MaxResults <= 0 {
-		params.MaxResults = 5
+	defaultMax := t.DefaultMaxResults
+	if defaultMax <= 0 {
+		defaultMax = defaultWebSearchMaxResults
 	}
-	if params.MaxResults > 10 {
-		params.MaxResults = 10
+	maxLimit := t.MaxResultsLimit
+	if maxLimit <= 0 {
+		maxLimit = defaultWebSearchMaxResultsLimit
+	}
+	if defaultMax > maxLimit {
+		defaultMax = maxLimit
 	}
 
-	apiKey := os.Getenv("TAVILY_API_KEY")
+	if params.MaxResults <= 0 {
+		params.MaxResults = defaultMax
+	}
+	if params.MaxResults > maxLimit {
+		params.MaxResults = maxLimit
+	}
+
+	apiKey := t.APIKey
+	if apiKey == "" {
+		apiKey = os.Getenv("TAVILY_API_KEY")
+	}
 	if apiKey == "" {
 		return "", fmt.Errorf("web_search: 未设置 TAVILY_API_KEY 环境变量，搜索不可用")
 	}
 
-	return tavilySearch(ctx, apiKey, params.Query, params.MaxResults)
+	endpoint := t.Endpoint
+	if endpoint == "" {
+		endpoint = defaultWebSearchEndpoint
+	}
+	httpTimeout := t.HTTPTimeout
+	if httpTimeout <= 0 {
+		httpTimeout = defaultWebSearchTimeoutSeconds * time.Second
+	}
+
+	return tavilySearch(ctx, endpoint, httpTimeout, apiKey, params.Query, params.MaxResults)
 }
 
 // tavilySearch 调用 Tavily Search API 并返回结构化的搜索结果。
-func tavilySearch(ctx context.Context, apiKey, query string, maxResults int) (string, error) {
+func tavilySearch(ctx context.Context, endpoint string, timeout time.Duration, apiKey, query string, maxResults int) (string, error) {
 	reqBody := map[string]interface{}{
 		"query":           query,
 		"max_results":     maxResults,
@@ -242,14 +328,14 @@ func tavilySearch(ctx context.Context, apiKey, query string, maxResults int) (st
 		return "", fmt.Errorf("web_search: 序列化请求失败: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.tavily.com/search", strings.NewReader(string(bodyBytes)))
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(string(bodyBytes)))
 	if err != nil {
 		return "", fmt.Errorf("web_search: 创建请求失败: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("web_search: 请求失败: %w", err)
