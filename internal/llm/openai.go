@@ -78,8 +78,8 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 	choice := resp.Choices[0]
 
 	return &Response{
-		Role:    choice.Message.Role,
-		Content: choice.Message.Content,
+		Role:      choice.Message.Role,
+		Content:   choice.Message.Content,
 		ToolCalls: fromOpenAIToolCalls(choice.Message.ToolCalls),
 	}, nil
 }

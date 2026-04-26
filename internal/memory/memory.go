@@ -19,12 +19,12 @@ import (
 // Memory manages the agent's conversation history.
 // It is safe for concurrent use.
 type Memory struct {
-	mu         sync.RWMutex
-	messages   []llm.Message
-	maxMsg     int
-	maxTokens  int
-	tke        *tiktoken.Tiktoken
-	dataDir    string
+	mu        sync.RWMutex
+	messages  []llm.Message
+	maxMsg    int
+	maxTokens int
+	tke       *tiktoken.Tiktoken
+	dataDir   string
 }
 
 // New creates a new Memory with the given configuration.

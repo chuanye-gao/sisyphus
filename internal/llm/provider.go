@@ -10,17 +10,17 @@ import (
 
 // Message represents a single chat message.
 type Message struct {
-	Role       string       `json:"role"`    // "system", "user", "assistant", "tool"
-	Content    string       `json:"content"`
-	ToolCalls  []ToolCall   `json:"tool_calls,omitempty"`
-	ToolCallID string       `json:"tool_call_id,omitempty"`
+	Role       string     `json:"role"` // "system", "user", "assistant", "tool"
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
 // ToolCall represents a request from the LLM to invoke a tool.
 type ToolCall struct {
-	ID       string          `json:"id"`
-	Type     string          `json:"type"` // "function"
-	Function FunctionCall    `json:"function"`
+	ID       string       `json:"id"`
+	Type     string       `json:"type"` // "function"
+	Function FunctionCall `json:"function"`
 }
 
 // FunctionCall contains the function name and arguments.
@@ -31,8 +31,8 @@ type FunctionCall struct {
 
 // ToolDef defines a tool for the LLM to use.
 type ToolDef struct {
-	Type     string       `json:"type"` // "function"
-	Function FunctionDef  `json:"function"`
+	Type     string      `json:"type"` // "function"
+	Function FunctionDef `json:"function"`
 }
 
 // FunctionDef describes a function the LLM can call.
@@ -44,9 +44,9 @@ type FunctionDef struct {
 
 // Response is the result of a Chat call.
 type Response struct {
-	Role      string      `json:"role"`
-	Content   string      `json:"content"`
-	ToolCalls []ToolCall  `json:"tool_calls,omitempty"`
+	Role      string     `json:"role"`
+	Content   string     `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // Provider is the interface all LLM backends must implement.
