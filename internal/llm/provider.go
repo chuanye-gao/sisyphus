@@ -57,8 +57,8 @@ type Response struct {
 	Content          string        `json:"content"`
 	ReasoningContent string        `json:"reasoning_content,omitempty"` // DeepSeek thinking mode
 	ToolCalls        []ToolCall    `json:"tool_calls,omitempty"`
-	Usage            Usage         `json:"usage,omitempty"`   // token usage stats
-	Latency          time.Duration `json:"-"`                 // round-trip time of the API call
+	Usage            Usage         `json:"usage,omitempty"` // token usage stats
+	Latency          time.Duration `json:"-"`               // round-trip time of the API call
 }
 
 // Provider is the interface all LLM backends must implement.

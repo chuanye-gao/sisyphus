@@ -17,9 +17,9 @@ var _ StreamProvider = (*OpenAIProvider)(nil)
 
 // oaiTCAccumulator accumulates incremental tool call fragments from OpenAI streaming.
 type oaiTCAccumulator struct {
-	id         string
-	typ        string
-	name       string
+	id          string
+	typ         string
+	name        string
 	argsBuilder strings.Builder
 }
 

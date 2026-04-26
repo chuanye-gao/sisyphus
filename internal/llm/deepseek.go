@@ -46,18 +46,18 @@ func NewDeepSeek(cfg OpenAIConfig) *DeepSeekProvider {
 // dsMessage is the wire format for a single message in the DeepSeek API.
 // reasoning_content must be passed back when it was present in a previous assistant response.
 type dsMessage struct {
-	Role             string         `json:"role"`
-	Content          string         `json:"content"`
-	ReasoningContent string         `json:"reasoning_content,omitempty"`
+	Role             string          `json:"role"`
+	Content          string          `json:"content"`
+	ReasoningContent string          `json:"reasoning_content,omitempty"`
 	ToolCalls        []dsReqToolCall `json:"tool_calls,omitempty"`
-	ToolCallID       string         `json:"tool_call_id,omitempty"`
+	ToolCallID       string          `json:"tool_call_id,omitempty"`
 }
 
 // dsReqToolCall is the outgoing wire format for tool calls.
 // DeepSeek (like OpenAI) expects arguments as a JSON-encoded string, not an object.
 type dsReqToolCall struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
 	Function struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"` // must be a JSON string, not an object
@@ -77,8 +77,8 @@ type dsRequest struct {
 // not as a JSON object. Using string here lets encoding/json decode it
 // correctly; we convert to json.RawMessage afterward.
 type dsRespToolCall struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
 	Function struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"` // arrives as a string, e.g. "{\"command\":\"dir\"}"

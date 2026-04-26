@@ -17,9 +17,9 @@ var _ StreamProvider = (*DeepSeekProvider)(nil)
 
 // dsStreamDelta is the delta object inside a streaming choice.
 type dsStreamDelta struct {
-	Role             string           `json:"role"`
-	Content          string           `json:"content"`
-	ReasoningContent string           `json:"reasoning_content"`
+	Role             string            `json:"role"`
+	Content          string            `json:"content"`
+	ReasoningContent string            `json:"reasoning_content"`
 	ToolCalls        []dsStreamTCDelta `json:"tool_calls"`
 }
 
@@ -27,8 +27,8 @@ type dsStreamDelta struct {
 // The index field tells us which tool call this fragment belongs to.
 type dsStreamTCDelta struct {
 	Index    int    `json:"index"`
-	ID       string `json:"id,omitempty"`       // present only on first fragment
-	Type     string `json:"type,omitempty"`      // present only on first fragment
+	ID       string `json:"id,omitempty"`   // present only on first fragment
+	Type     string `json:"type,omitempty"` // present only on first fragment
 	Function struct {
 		Name      string `json:"name,omitempty"`      // present only on first fragment
 		Arguments string `json:"arguments,omitempty"` // incremental JSON string fragment
@@ -51,9 +51,9 @@ type dsStreamChunk struct {
 
 // toolCallAccumulator accumulates incremental tool call fragments.
 type toolCallAccumulator struct {
-	id       string
-	typ      string
-	name     string
+	id          string
+	typ         string
+	name        string
 	argsBuilder strings.Builder
 }
 
@@ -74,12 +74,12 @@ func (p *DeepSeekProvider) StreamChat(ctx context.Context, messages []Message, t
 	}
 
 	type dsStreamRequest struct {
-		Model       string      `json:"model"`
-		Messages    []dsMessage `json:"messages"`
-		MaxTokens   int         `json:"max_tokens,omitempty"`
-		Temperature float64     `json:"temperature"`
-		Tools       []ToolDef   `json:"tools,omitempty"`
-		Stream      bool        `json:"stream"`
+		Model         string      `json:"model"`
+		Messages      []dsMessage `json:"messages"`
+		MaxTokens     int         `json:"max_tokens,omitempty"`
+		Temperature   float64     `json:"temperature"`
+		Tools         []ToolDef   `json:"tools,omitempty"`
+		Stream        bool        `json:"stream"`
 		StreamOptions *struct {
 			IncludeUsage bool `json:"include_usage"`
 		} `json:"stream_options,omitempty"`
