@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -171,13 +173,15 @@ func (t WriteFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 	return bt.Execute(ctx, json.RawMessage(fmt.Sprintf(`{"command": "%s"}`, cmd)))
 }
 
-// WebSearchTool 执行网络搜索。当前为桩实现，待对接搜索 API。
+// WebSearchTool 使用 Tavily API 执行网络搜索。
+// Tavily 是专为 AI agent 设计的搜索引擎，返回结构化结果。
+// API 密钥通过环境变量 TAVILY_API_KEY 提供。
 type WebSearchTool struct{}
 
 func (WebSearchTool) Name() string { return "web_search" }
 
 func (WebSearchTool) Description() string {
-	return "搜索网络获取信息。"
+	return "使用 Tavily 搜索引擎搜索网络，获取最新信息。返回结构化结果（标题、网址、摘要）。"
 }
 
 func (WebSearchTool) Parameters() json.RawMessage {
@@ -187,12 +191,101 @@ func (WebSearchTool) Parameters() json.RawMessage {
 			"query": {
 				"type": "string",
 				"description": "搜索关键词"
+			},
+			"max_results": {
+				"type": "integer",
+				"description": "最大返回结果数（默认5，最多10）"
 			}
 		},
 		"required": ["query"]
 	}`)
 }
 
-func (WebSearchTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
-	return "", fmt.Errorf("web_search: 尚未实现，请配置搜索 API 后端")
+func (t WebSearchTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+	var params struct {
+		Query      string `json:"query"`
+		MaxResults int    `json:"max_results"`
+	}
+	if err := json.Unmarshal(args, &params); err != nil {
+		return "", fmt.Errorf("web_search: 参数解析失败: %w", err)
+	}
+	if params.Query == "" {
+		return "", fmt.Errorf("web_search: 搜索关键词为空")
+	}
+	if params.MaxResults <= 0 {
+		params.MaxResults = 5
+	}
+	if params.MaxResults > 10 {
+		params.MaxResults = 10
+	}
+
+	apiKey := os.Getenv("TAVILY_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("web_search: 未设置 TAVILY_API_KEY 环境变量，搜索不可用")
+	}
+
+	return tavilySearch(ctx, apiKey, params.Query, params.MaxResults)
+}
+
+// tavilySearch 调用 Tavily Search API 并返回结构化的搜索结果。
+func tavilySearch(ctx context.Context, apiKey, query string, maxResults int) (string, error) {
+	reqBody := map[string]interface{}{
+		"query":           query,
+		"max_results":     maxResults,
+		"search_depth":    "basic",
+		"include_answer":  true,
+		"include_domains": []string{},
+		"exclude_domains": []string{},
+	}
+	bodyBytes, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("web_search: 序列化请求失败: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.tavily.com/search", strings.NewReader(string(bodyBytes)))
+	if err != nil {
+		return "", fmt.Errorf("web_search: 创建请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("web_search: 请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		var errBody struct {
+			Message string `json:"message"`
+		}
+		json.NewDecoder(resp.Body).Decode(&errBody)
+		return "", fmt.Errorf("web_search: API 返回 %d: %s", resp.StatusCode, errBody.Message)
+	}
+
+	var result struct {
+		Answer  string `json:"answer"`
+		Results []struct {
+			Title   string `json:"title"`
+			URL     string `json:"url"`
+			Content string `json:"content"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("web_search: 解析响应失败: %w", err)
+	}
+
+	var sb strings.Builder
+	if result.Answer != "" {
+		sb.WriteString(result.Answer)
+		sb.WriteString("\n\n--- 搜索结果 ---\n")
+	}
+	for i, r := range result.Results {
+		sb.WriteString(fmt.Sprintf("%d. %s\n   网址: %s\n   摘要: %s\n", i+1, r.Title, r.URL, r.Content))
+	}
+	if sb.Len() == 0 {
+		return "未找到相关结果。", nil
+	}
+	return strings.TrimSpace(sb.String()), nil
 }

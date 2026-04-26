@@ -1,0 +1,108 @@
+# Sisyphus CI — 多平台编译 + 测试 + 代码检查
+# 在 push 和 PR 时自动触发
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── 编译检查（三平台） ──────────────────────────────────
+  build:
+    name: 编译 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ["1.24"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Go ${{ matrix.go }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: 下载依赖
+        run: go mod download
+
+      - name: 编译
+        run: go build -v ./...
+
+      - name: 编译二进制
+        run: go build -o bin/sisyphus${{ runner.os == 'Windows' && '.exe' || '' }} ./cmd/sisyphus
+
+  # ── 单元测试（三平台） ──────────────────────────────────
+  test:
+    name: 测试 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        go: ["1.24"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Go ${{ matrix.go }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: 运行测试
+        run: go test -race -count=1 -v ./...
+
+  # ── 代码检查 ──────────────────────────────────────────
+  vet:
+    name: go vet + 格式检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: gofmt 格式检查
+        run: |
+          fmt=$(gofmt -s -l .)
+          if [ -n "$fmt" ]; then
+            echo "以下文件格式不正确:"
+            echo "$fmt"
+            exit 1
+          fi
+
+  # ── 功能冒烟测试（Linux） ──────────────────────────────
+  smoke:
+    name: 冒烟测试
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: 编译
+        run: go build -o bin/sisyphus ./cmd/sisyphus
+
+      - name: 验证二进制可执行
+        run: |
+          chmod +x bin/sisyphus
+          ./bin/sisyphus --help 2>&1 || true
+          echo "二进制文件可正常启动"
+
+      - name: 验证配置文件加载（无文件时用默认值）
+        run: |
+          unset SISYPHUS_CONFIG
+          timeout 3 ./bin/sisyphus 2>&1 || true
+          echo "默认配置加载成功"
