@@ -87,3 +87,27 @@ func TestRegistryExecute(t *testing.T) {
 		t.Errorf("期望 'hello world'，实际 '%s'", result)
 	}
 }
+
+func TestRegistrySourceMetadata(t *testing.T) {
+	r := NewRegistry()
+	if err := r.RegisterWithSource(fakeTool{name: "remote"}, Source{
+		Kind:       "mcp",
+		Server:     "github",
+		RemoteName: "create_issue",
+	}); err != nil {
+		t.Fatalf("RegisterWithSource failed: %v", err)
+	}
+
+	source, ok := r.Source("remote")
+	if !ok {
+		t.Fatal("Source returned false")
+	}
+	if source.Kind != "mcp" || source.Server != "github" || source.RemoteName != "create_issue" {
+		t.Fatalf("unexpected source: %+v", source)
+	}
+
+	entries := r.Entries()
+	if len(entries) != 1 || entries[0].Tool.Name() != "remote" {
+		t.Fatalf("unexpected entries: %+v", entries)
+	}
+}

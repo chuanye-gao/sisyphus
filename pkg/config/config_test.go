@@ -71,6 +71,28 @@ func TestEnvOverrides(t *testing.T) {
 	}
 }
 
+func TestLoadRecordsConfigPath(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + string(os.PathSeparator) + "config.yaml"
+	if err := os.WriteFile(path, []byte("llm:\n  provider: deepseek\n"), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	os.Setenv("SISYPHUS_CONFIG", path)
+	defer os.Unsetenv("SISYPHUS_CONFIG")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if cfg.Path == "" {
+		t.Fatal("expected config path to be recorded")
+	}
+	if cfg.LLM.Provider != "deepseek" {
+		t.Fatalf("expected config file to be loaded, got provider %s", cfg.LLM.Provider)
+	}
+}
+
 func TestDataDir(t *testing.T) {
 	dir := DataDir()
 	if dir == "" {
@@ -79,6 +101,54 @@ func TestDataDir(t *testing.T) {
 	// Windows 和 Linux 路径不一样，但都应该包含 "sisyphus"
 	if !contains(dir, "sisyphus") {
 		t.Errorf("DataDir 应包含 'sisyphus'，实际 %s", dir)
+	}
+}
+
+func TestToolEnableFilters(t *testing.T) {
+	cfg := ToolsConfig{
+		Enabled:  []string{"bash", "read_file"},
+		Disabled: []string{"read_file"},
+	}
+	if !cfg.BuiltinToolEnabled("bash") {
+		t.Fatal("bash should be enabled")
+	}
+	if cfg.BuiltinToolEnabled("read_file") {
+		t.Fatal("disabled should override enabled")
+	}
+	if cfg.BuiltinToolEnabled("search") {
+		t.Fatal("search should not be enabled when allow list is set")
+	}
+
+	defaultCfg := ToolsConfig{}
+	if !defaultCfg.BuiltinToolEnabled("search") {
+		t.Fatal("empty allow list should enable built-ins by default")
+	}
+}
+
+func TestMCPServerEnableFilters(t *testing.T) {
+	disabled := false
+	server := MCPServerConfig{Enabled: &disabled}
+	if server.IsEnabled() {
+		t.Fatal("server should be disabled")
+	}
+
+	enabled := true
+	server = MCPServerConfig{
+		Enabled:       &enabled,
+		Tools:         []string{"create_issue", "push_files"},
+		DisabledTools: []string{"push_files"},
+	}
+	if !server.IsEnabled() {
+		t.Fatal("server should be enabled")
+	}
+	if !server.ToolEnabled("create_issue") {
+		t.Fatal("create_issue should be enabled")
+	}
+	if server.ToolEnabled("push_files") {
+		t.Fatal("disabled_tools should override tools")
+	}
+	if server.ToolEnabled("search_code") {
+		t.Fatal("search_code should not be enabled when tool allow list is set")
 	}
 }
 

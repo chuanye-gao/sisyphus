@@ -66,7 +66,9 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 		req.Tools = toOpenAITools(tools)
 	}
 
+	start := time.Now()
 	resp, err := p.client.CreateChatCompletion(ctx, req)
+	latency := time.Since(start)
 	if err != nil {
 		return nil, fmt.Errorf("openai chat: %w", err)
 	}
@@ -81,6 +83,12 @@ func (p *OpenAIProvider) Chat(ctx context.Context, messages []Message, tools []T
 		Role:      choice.Message.Role,
 		Content:   choice.Message.Content,
 		ToolCalls: fromOpenAIToolCalls(choice.Message.ToolCalls),
+		Usage: Usage{
+			PromptTokens:     resp.Usage.PromptTokens,
+			CompletionTokens: resp.Usage.CompletionTokens,
+			TotalTokens:      resp.Usage.TotalTokens,
+		},
+		Latency: latency,
 	}, nil
 }
 

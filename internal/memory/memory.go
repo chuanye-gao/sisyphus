@@ -128,32 +128,55 @@ func (m *Memory) StoredAt(sessionID string) string {
 }
 
 // trimLocked removes old messages to stay within limits. Must hold m.mu write lock.
+//
+// It trims in "conversation units" to preserve structural integrity:
+//   - An assistant message with tool_calls and its subsequent tool result messages
+//     form an atomic unit and must be removed together.
+//   - A bare user or assistant message (no tool_calls) is its own unit.
+//   - The system message (index 0) is never removed.
 func (m *Memory) trimLocked() {
+	start := 0
+	if len(m.messages) > 0 && m.messages[0].Role == "system" {
+		start = 1
+	}
+
 	// Trim by count
-	if m.maxMsg > 0 && len(m.messages) > m.maxMsg {
-		excess := len(m.messages) - m.maxMsg
-		// Keep the first system message if present
-		cut := excess
-		if len(m.messages) > 0 && m.messages[0].Role == "system" {
-			cut = excess
-		}
-		if cut >= len(m.messages) {
-			cut = len(m.messages)
-		}
-		// Remove old messages but preserve the tail
-		m.messages = m.messages[cut:]
+	for m.maxMsg > 0 && len(m.messages) > m.maxMsg && start < len(m.messages) {
+		end := nextUnitEnd(m.messages, start)
+		m.messages = append(m.messages[:start], m.messages[end:]...)
 	}
 
 	// Trim by tokens
-	if m.maxTokens > 0 {
-		for m.countTokensLocked() > m.maxTokens && len(m.messages) > 2 {
-			start := 1 // skip system message
-			if m.messages[0].Role != "system" {
-				start = 0
-			}
-			m.messages = append(m.messages[:start], m.messages[start+1:]...)
-		}
+	for m.maxTokens > 0 && m.countTokensLocked() > m.maxTokens && start < len(m.messages)-1 {
+		end := nextUnitEnd(m.messages, start)
+		m.messages = append(m.messages[:start], m.messages[end:]...)
 	}
+
+	// Post-trim sanity: strip any orphaned tool messages at the front.
+	// This can happen if a saved session was loaded after partial trimming.
+	for start < len(m.messages) && m.messages[start].Role == "tool" {
+		m.messages = append(m.messages[:start], m.messages[start+1:]...)
+	}
+}
+
+// nextUnitEnd returns the exclusive end index of the conversation unit starting at idx.
+// A unit is either:
+//   - A single message (user, or assistant without tool_calls)
+//   - An assistant message with tool_calls + all subsequent tool result messages
+func nextUnitEnd(msgs []llm.Message, idx int) int {
+	if idx >= len(msgs) {
+		return idx
+	}
+	msg := msgs[idx]
+	// If this assistant message has tool_calls, skip over the following tool results.
+	if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
+		end := idx + 1
+		for end < len(msgs) && msgs[end].Role == "tool" {
+			end++
+		}
+		return end
+	}
+	return idx + 1
 }
 
 func (m *Memory) countTokensLocked() int {

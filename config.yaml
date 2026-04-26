@@ -7,7 +7,7 @@ llm:
   provider: deepseek
   model: deepseek-v4-pro
   base_url: 	https://api.deepseek.com
-  api_key: ${OPENAI_API_KEY}
+  api_key: sk-2c2004a774bf47438b76bda09783dda0
   max_tokens: 8192
   temperature: 0.0
   timeout: 120
@@ -28,15 +28,17 @@ memory:
 # Use MCP servers for external capability integration.
 mcp_servers:
   - name: filesystem
+    enabled: true
     command: npx
     args:
       - -y
       - '@modelcontextprotocol/server-filesystem'
-      - /workspace
+      - 'D:\GithubRepositories\LongWay\sisyphus'
     env: {}
     timeout_seconds: 30
 
   - name: github
+    enabled: false
     command: npx
     args:
       - -y
@@ -46,6 +48,13 @@ mcp_servers:
     timeout_seconds: 30
 
 tools:
+  enabled:
+    - bash
+    - read_file
+    - write_file
+    - edit_file
+    - list_files
+    - search
   bash:
     timeout_seconds: 10
   web_search:

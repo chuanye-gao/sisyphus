@@ -29,29 +29,51 @@ type Tool interface {
 	Execute(ctx context.Context, args json.RawMessage) (string, error)
 }
 
+// Source describes where a tool came from. It is metadata for display,
+// filtering, and policy; the agent loop still executes every tool uniformly.
+type Source struct {
+	Kind       string // builtin, mcp, plugin, etc.
+	Server     string // MCP server or provider name, if any
+	RemoteName string // provider-native tool name, if it differs from Name()
+}
+
+// Entry is a registered tool plus metadata.
+type Entry struct {
+	Tool   Tool
+	Source Source
+}
+
 // Registry manages tool registration and lookup. It is safe for concurrent use.
 type Registry struct {
 	mu    sync.RWMutex
-	tools map[string]Tool // name -> tool
+	tools map[string]Entry // name -> entry
 }
 
 // NewRegistry creates an empty tool registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		tools: make(map[string]Tool),
+		tools: make(map[string]Entry),
 	}
 }
 
 // Register adds a tool to the registry. It returns an error if a tool with
 // the same name is already registered.
 func (r *Registry) Register(t Tool) error {
+	return r.RegisterWithSource(t, Source{Kind: "builtin"})
+}
+
+// RegisterWithSource adds a tool with source metadata.
+func (r *Registry) RegisterWithSource(t Tool, source Source) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	name := t.Name()
 	if _, ok := r.tools[name]; ok {
 		return fmt.Errorf("tool %q already registered", name)
 	}
-	r.tools[name] = t
+	if source.Kind == "" {
+		source.Kind = "builtin"
+	}
+	r.tools[name] = Entry{Tool: t, Source: source}
 	return nil
 }
 
@@ -59,7 +81,19 @@ func (r *Registry) Register(t Tool) error {
 func (r *Registry) Get(name string) Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.tools[name]
+	entry, ok := r.tools[name]
+	if !ok {
+		return nil
+	}
+	return entry.Tool
+}
+
+// Source returns metadata for a registered tool.
+func (r *Registry) Source(name string) (Source, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entry, ok := r.tools[name]
+	return entry.Source, ok
 }
 
 // List returns all registered tool names.
@@ -78,8 +112,19 @@ func (r *Registry) All() []Tool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	tools := make([]Tool, 0, len(r.tools))
-	for _, t := range r.tools {
-		tools = append(tools, t)
+	for _, entry := range r.tools {
+		tools = append(tools, entry.Tool)
 	}
 	return tools
+}
+
+// Entries returns all registered tools with metadata.
+func (r *Registry) Entries() []Entry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	entries := make([]Entry, 0, len(r.tools))
+	for _, entry := range r.tools {
+		entries = append(entries, entry)
+	}
+	return entries
 }

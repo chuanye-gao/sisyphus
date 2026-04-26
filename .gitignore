@@ -23,6 +23,8 @@ Thumbs.db
 config/local.yaml
 .env
 
+TheTravel.md
+
 # 编译产物
 sisyphus
 sisyphus.exe

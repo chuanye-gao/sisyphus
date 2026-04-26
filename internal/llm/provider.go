@@ -6,14 +6,16 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"time"
 )
 
 // Message represents a single chat message.
 type Message struct {
-	Role       string     `json:"role"` // "system", "user", "assistant", "tool"
-	Content    string     `json:"content"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Role             string     `json:"role"` // "system", "user", "assistant", "tool"
+	Content          string     `json:"content"`
+	ReasoningContent string     `json:"reasoning_content,omitempty"` // DeepSeek thinking mode
+	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string     `json:"tool_call_id,omitempty"`
 }
 
 // ToolCall represents a request from the LLM to invoke a tool.
@@ -42,11 +44,21 @@ type FunctionDef struct {
 	Parameters  json.RawMessage `json:"parameters"`
 }
 
+// Usage contains token usage statistics from an LLM call.
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
 // Response is the result of a Chat call.
 type Response struct {
-	Role      string     `json:"role"`
-	Content   string     `json:"content"`
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Role             string        `json:"role"`
+	Content          string        `json:"content"`
+	ReasoningContent string        `json:"reasoning_content,omitempty"` // DeepSeek thinking mode
+	ToolCalls        []ToolCall    `json:"tool_calls,omitempty"`
+	Usage            Usage         `json:"usage,omitempty"`   // token usage stats
+	Latency          time.Duration `json:"-"`                 // round-trip time of the API call
 }
 
 // Provider is the interface all LLM backends must implement.

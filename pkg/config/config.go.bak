@@ -28,14 +28,12 @@ import (
 
 // Config 包含 Sisyphus 的所有配置项。
 type Config struct {
-	Agent    AgentConfig       `yaml:"agent"`
-	LLM      LLMConfig         `yaml:"llm"`
-	Memory   MemoryConfig      `yaml:"memory"`
-	Queue    QueueConfig       `yaml:"queue"`
-	Tools    ToolsConfig       `yaml:"tools"`
-	MCP      []MCPServerConfig `yaml:"mcp_servers"`
-	LogLevel string            `yaml:"log_level"`
-	Path     string            `yaml:"-"`
+	Agent    AgentConfig  `yaml:"agent"`
+	LLM      LLMConfig    `yaml:"llm"`
+	Memory   MemoryConfig `yaml:"memory"`
+	Queue    QueueConfig  `yaml:"queue"`
+	Tools    ToolsConfig  `yaml:"tools"`
+	LogLevel string       `yaml:"log_level"`
 }
 
 // AgentConfig 控制 agent 执行循环。
@@ -69,8 +67,6 @@ type QueueConfig struct {
 
 // ToolsConfig 控制内置工具行为，避免在代码里写死个人参数。
 type ToolsConfig struct {
-	Enabled   []string            `yaml:"enabled"`
-	Disabled  []string            `yaml:"disabled"`
 	Bash      BashToolConfig      `yaml:"bash"`
 	WebSearch WebSearchToolConfig `yaml:"web_search"`
 }
@@ -88,20 +84,6 @@ type WebSearchToolConfig struct {
 	TimeoutSeconds    int    `yaml:"timeout_seconds"`     // HTTP 超时（秒）
 	DefaultMaxResults int    `yaml:"default_max_results"` // 默认返回数量
 	MaxResultsLimit   int    `yaml:"max_results_limit"`   // 最大允许数量
-}
-
-// MCPServerConfig describes an external MCP server process. The current CLI
-// stores this config for the next integration layer; built-in tools stay usable
-// without MCP.
-type MCPServerConfig struct {
-	Name           string            `yaml:"name"`
-	Enabled        *bool             `yaml:"enabled"`
-	Command        string            `yaml:"command"`
-	Args           []string          `yaml:"args"`
-	Env            map[string]string `yaml:"env"`
-	TimeoutSeconds int               `yaml:"timeout_seconds"`
-	Tools          []string          `yaml:"tools"`
-	DisabledTools  []string          `yaml:"disabled_tools"`
 }
 
 // DefaultConfig 返回一份带有合理默认值的配置。
@@ -152,11 +134,6 @@ func Load() (*Config, error) {
 	if path != "" {
 		if err := loadFile(path, cfg); err != nil {
 			return nil, fmt.Errorf("config: 解析 %s 失败: %w", path, err)
-		}
-		if abs, err := filepath.Abs(path); err == nil {
-			cfg.Path = abs
-		} else {
-			cfg.Path = path
 		}
 	}
 
@@ -246,52 +223,12 @@ func loadFile(path string, cfg *Config) error {
 	return yaml.Unmarshal(data, cfg)
 }
 
-// BuiltinToolEnabled reports whether a built-in tool should be registered.
-func (c ToolsConfig) BuiltinToolEnabled(name string) bool {
-	if containsString(c.Disabled, name) {
-		return false
-	}
-	if len(c.Enabled) == 0 {
-		return true
-	}
-	return containsString(c.Enabled, name)
-}
-
-// IsEnabled reports whether an MCP server should be started. Missing enabled
-// means true to preserve compatibility with existing configs.
-func (c MCPServerConfig) IsEnabled() bool {
-	return c.Enabled == nil || *c.Enabled
-}
-
-// ToolEnabled reports whether a remote MCP tool should be adapted locally.
-func (c MCPServerConfig) ToolEnabled(name string) bool {
-	if containsString(c.DisabledTools, name) {
-		return false
-	}
-	if len(c.Tools) == 0 {
-		return true
-	}
-	return containsString(c.Tools, name)
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
-}
-
 func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("SISYPHUS_LOG_LEVEL"); v != "" {
 		cfg.LogLevel = v
 	}
 	// 环境变量直接覆盖（优先级高于配置文件）
 	if v := os.Getenv("OPENAI_API_KEY"); v != "" {
-		cfg.LLM.APIKey = v
-	}
-	if v := os.Getenv("DEEPSEEK_API_KEY"); v != "" && cfg.LLM.Provider == "deepseek" {
 		cfg.LLM.APIKey = v
 	}
 	if v := os.Getenv("SISYPHUS_MODEL"); v != "" {
