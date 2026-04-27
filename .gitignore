@@ -1,8 +1,10 @@
-# 二进制文件
+# Build outputs
 bin/
 *.exe
 *.test
 *.out
+sisyphus
+sisyphus.exe
 
 # Go
 vendor/
@@ -15,16 +17,12 @@ vendor/
 *.swo
 .claude/
 
-# 操作系统临时文件
+# OS temporary files
 .DS_Store
 Thumbs.db
 
-# 配置文件（可能包含 API 密钥）
+# Local configuration and secrets
+config.yaml
 config/local.yaml
+config.local.yaml
 .env
-
-TheTravel.md
-
-# 编译产物
-sisyphus
-sisyphus.exe

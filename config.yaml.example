@@ -1,13 +1,13 @@
 # Sisyphus external configuration template.
 # Copy this file to ~/.config/sisyphus/config.yaml (Linux/macOS)
 # or %APPDATA%/sisyphus/config.yaml (Windows),
-# or set SISYPHUS_CONFIG to point to this file.
+# or set SISYPHUS_CONFIG to point to your local config file.
 
 llm:
   provider: deepseek
   model: deepseek-v4-pro
-  base_url: 	https://api.deepseek.com
-  api_key: sk-2c2004a774bf47438b76bda09783dda0
+  base_url: https://api.deepseek.com
+  api_key: ${DEEPSEEK_API_KEY}
   max_tokens: 8192
   temperature: 0.0
   timeout: 120
@@ -33,7 +33,7 @@ mcp_servers:
     args:
       - -y
       - '@modelcontextprotocol/server-filesystem'
-      - 'D:\GithubRepositories\LongWay\sisyphus'
+      - '${SISYPHUS_WORKSPACE}'
     env: {}
     timeout_seconds: 30
 
