@@ -178,6 +178,14 @@ func findConfigPath() string {
 		return "config.yaml"
 	}
 
+	// 3. 可执行文件所在目录（便携式部署：bin/ 下放 exe + config.yaml）
+	if exe, err := os.Executable(); err == nil {
+		p := filepath.Join(filepath.Dir(exe), "config.yaml")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
 	if runtime.GOOS == "windows" {
 		return findConfigPathWindows()
 	}

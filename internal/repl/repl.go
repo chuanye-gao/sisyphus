@@ -35,6 +35,8 @@ type Config struct {
 	Cfg       *config.Config
 	SessionID string // empty = new session
 	Debug     bool
+	TraceRaw  bool
+	TraceJSON bool
 }
 
 // New creates a new REPL.
@@ -50,7 +52,7 @@ func New(rc Config) (*REPL, error) {
 	ag := agent.New(rc.Provider, mem, rc.Registry, rc.Cfg.Agent.MaxSteps, rc.Debug)
 
 	useColor := IsTerminal(os.Stdout)
-	renderer := NewRenderer(os.Stdout, useColor, rc.Debug)
+	renderer := NewRenderer(os.Stdout, useColor, rc.Debug, rc.TraceRaw, rc.TraceJSON)
 
 	sessionID := rc.SessionID
 	if sessionID != "" {

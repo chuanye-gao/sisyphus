@@ -84,7 +84,7 @@ func (r *REPL) handleCommand(ctx context.Context, line string) bool {
 		v := !r.renderer.Verbose()
 		r.renderer.SetVerbose(v)
 		if v {
-			r.renderer.Success("详细���式已开启（显���完整 thinking）")
+			r.renderer.Success("详细模式已开启（显示 DEBUG trace 和截断 reasoning）")
 		} else {
 			r.renderer.Success("详细模式已关闭")
 		}
@@ -110,7 +110,7 @@ func (r *REPL) showHelp() {
   /sessions        列出所有已保存的会话
   /model           查看当前模型
   /tools           列出已注册的工具
-  /verbose         切换详细模式（显示完整 thinking）
+  /verbose         切换详细模式（显示 DEBUG trace 和截断 reasoning）
   /memory, /mem    查看当��记忆状态
 
 输入技巧:

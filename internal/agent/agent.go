@@ -13,12 +13,12 @@ package agent
 import (
 	"context"
 	"fmt"
-	"log"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/longway/sisyphus/internal/llm"
+	"github.com/longway/sisyphus/internal/logger"
 	"github.com/longway/sisyphus/internal/memory"
 	"github.com/longway/sisyphus/internal/task"
 	"github.com/longway/sisyphus/internal/tool"
@@ -33,6 +33,7 @@ type Agent struct {
 	registry *tool.Registry
 	maxSteps int
 	debug    bool
+	log      *logger.Logger
 }
 
 // New creates a new Agent.
@@ -46,6 +47,7 @@ func New(provider llm.Provider, mem *memory.Memory, registry *tool.Registry, max
 		registry: registry,
 		maxSteps: maxSteps,
 		debug:    debug,
+		log:      logger.New("agent", debug),
 	}
 }
 
@@ -54,7 +56,7 @@ func New(provider llm.Provider, mem *memory.Memory, registry *tool.Registry, max
 func (a *Agent) Run(ctx context.Context, t *task.Task) {
 	taskStart := time.Now()
 	t.Start()
-	log.Printf("[agent] task %s started: %s", t.ID, t.Instruction)
+	a.log.Info("task %s started: %s", t.ID, t.Instruction)
 
 	// System prompt that instructs the LLM how to behave.
 	sysPrompt := buildSystemPromptV2()
@@ -73,54 +75,54 @@ func (a *Agent) Run(ctx context.Context, t *task.Task) {
 
 	// Debug: print initial setup
 	if a.debug {
-		log.Printf("[debug] ========== TASK INIT ==========")
-		log.Printf("[debug] system prompt (%d chars):\n%s", len(sysPrompt), sysPrompt)
+		a.log.Debug("========== TASK INIT ==========")
+		a.log.Debug("system prompt (%d chars):\n%s", len(sysPrompt), sysPrompt)
 		var names []string
 		for _, td := range toolDefs {
 			names = append(names, td.Function.Name)
 		}
-		log.Printf("[debug] tools registered: [%s]", strings.Join(names, ", "))
-		log.Printf("[debug] max steps: %d", a.maxSteps)
-		log.Printf("[debug] ================================")
+		a.log.Debug("tools registered: [%s]", strings.Join(names, ", "))
+		a.log.Debug("max steps: %d", a.maxSteps)
+		a.log.Debug("================================")
 	}
 
 	for step := 1; step <= a.maxSteps; step++ {
 		select {
 		case <-ctx.Done():
 			t.SetCancelled()
-			log.Printf("[agent] task %s cancelled at step %d", t.ID, step)
+			a.log.Warn("task %s cancelled at step %d", t.ID, step)
 			return
 		default:
 		}
 
-		log.Printf("[agent] task %s step %d/%d", t.ID, step, a.maxSteps)
+		a.log.Debug("task %s step %d/%d", t.ID, step, a.maxSteps)
 
 		// Debug: memory state before LLM call
 		if a.debug {
-			log.Printf("[debug] memory: %d messages, ~%d tokens", a.memory.Len(), a.memory.TokenCount())
+			a.log.Debug("memory: %d messages, ~%d tokens", a.memory.Len(), a.memory.TokenCount())
 		}
 
 		stepStart := time.Now()
 		resp, err := a.provider.Chat(ctx, a.memory.All(), toolDefs)
 		if err != nil {
 			t.SetError(fmt.Errorf("step %d: llm call: %w", step, err), step)
-			log.Printf("[agent] task %s step %d: error: %v", t.ID, step, err)
+			a.log.Error("task %s step %d: %v", t.ID, step, err)
 			return
 		}
 
 		// Debug: API response metadata
 		if a.debug {
-			log.Printf("[debug] --- LLM response ---")
-			log.Printf("[debug] latency: %s", resp.Latency)
-			log.Printf("[debug] usage: prompt=%d, completion=%d, total=%d",
+			a.log.Debug("--- LLM response ---")
+			a.log.Debug("latency: %s", resp.Latency)
+			a.log.Debug("usage: prompt=%d, completion=%d, total=%d",
 				resp.Usage.PromptTokens, resp.Usage.CompletionTokens, resp.Usage.TotalTokens)
 			if resp.ReasoningContent != "" {
-				log.Printf("[debug] thinking:\n%s", resp.ReasoningContent)
+				a.log.Debug("thinking:\n%s", resp.ReasoningContent)
 			}
 			if resp.Content != "" {
-				log.Printf("[debug] content:\n%s", resp.Content)
+				a.log.Debug("content:\n%s", resp.Content)
 			}
-			log.Printf("[debug] tool_calls: %d", len(resp.ToolCalls))
+			a.log.Debug("tool_calls: %d", len(resp.ToolCalls))
 		}
 
 		// Store the assistant message once, with both content and tool calls.
@@ -135,7 +137,7 @@ func (a *Agent) Run(ctx context.Context, t *task.Task) {
 		if len(resp.ToolCalls) == 0 {
 			t.SetResult(resp.Content, step)
 			elapsed := time.Since(taskStart)
-			log.Printf("[agent] task %s completed in %d steps (%s)", t.ID, step, elapsed)
+			a.log.Info("task %s completed in %d steps (%s)", t.ID, step, elapsed)
 			return
 		}
 
@@ -144,16 +146,16 @@ func (a *Agent) Run(ctx context.Context, t *task.Task) {
 			toolName := tc.Function.Name
 			toolArgs := tc.Function.Arguments
 
-			log.Printf("[agent] task %s step %d: calling tool %q", t.ID, step, toolName)
+			a.log.Debug("task %s step %d: calling tool %q", t.ID, step, toolName)
 			if a.debug {
-				log.Printf("[debug] call:   %s %s", toolName, string(toolArgs))
+				a.log.Debug("call:   %s %s", toolName, string(toolArgs))
 			}
 
 			tl := a.registry.Get(toolName)
 			if tl == nil {
 				errMsg := fmt.Sprintf("error: tool %q not found", toolName)
 				if a.debug {
-					log.Printf("[debug] result: %s", errMsg)
+					a.log.Debug("result: %s", errMsg)
 				}
 				a.memory.Add(llm.Message{
 					Role:       "tool",
@@ -171,7 +173,7 @@ func (a *Agent) Run(ctx context.Context, t *task.Task) {
 			}
 
 			if a.debug {
-				log.Printf("[debug] result (%s): %s", toolElapsed, result)
+				a.log.Debug("result (%s): %s", toolElapsed, result)
 			}
 
 			a.memory.Add(llm.Message{
@@ -183,13 +185,13 @@ func (a *Agent) Run(ctx context.Context, t *task.Task) {
 
 		// Debug: step summary
 		if a.debug {
-			log.Printf("[debug] step %d total: %s", step, time.Since(stepStart))
+			a.log.Debug("step %d total: %s", step, time.Since(stepStart))
 		}
 	}
 
 	elapsed := time.Since(taskStart)
 	t.SetError(fmt.Errorf("exceeded max steps (%d)", a.maxSteps), a.maxSteps)
-	log.Printf("[agent] task %s exceeded max steps (%s elapsed)", t.ID, elapsed)
+	a.log.Error("task %s exceeded max steps (%s elapsed)", t.ID, elapsed)
 }
 
 func buildSystemPromptV2() string {
@@ -279,6 +281,9 @@ func RunTask(ctx context.Context, provider llm.Provider, registry *tool.Registry
 // All methods are called from the agent goroutine; implementations must be
 // safe for that call pattern (typically writing to stdout sequentially).
 type StepHandler interface {
+	OnTurnStart(input string)
+	OnLLMRequest(round int, messages int, tools int)
+	OnLLMResponse(round int, usage llm.Usage, latency time.Duration, toolCalls int)
 	OnThinking(delta string)
 	OnContent(delta string)
 	OnToolCall(name string, args string)
@@ -314,6 +319,7 @@ func (a *Agent) ToolDefs() []llm.ToolDef {
 // The handler receives streaming events in real time.
 // Step may run multiple LLM calls internally (when tools are invoked).
 func (a *Agent) Step(ctx context.Context, userInput string, handler StepHandler) error {
+	handler.OnTurnStart(userInput)
 	a.memory.Add(llm.Message{
 		Role:    "user",
 		Content: userInput,
@@ -331,12 +337,13 @@ func (a *Agent) Step(ctx context.Context, userInput string, handler StepHandler)
 		default:
 		}
 
+		roundNo := round + 1
 		if canStream {
-			if err := a.stepStream(ctx, sp, toolDefs, handler); err != nil {
+			if err := a.stepStream(ctx, sp, toolDefs, handler, roundNo); err != nil {
 				return err
 			}
 		} else {
-			if err := a.stepSync(ctx, toolDefs, handler); err != nil {
+			if err := a.stepSync(ctx, toolDefs, handler, roundNo); err != nil {
 				return err
 			}
 		}
@@ -366,7 +373,8 @@ func (a *Agent) Step(ctx context.Context, userInput string, handler StepHandler)
 
 // stepStream performs one LLM call using streaming, accumulates the full
 // response, executes any tool calls, and writes everything into memory.
-func (a *Agent) stepStream(ctx context.Context, sp llm.StreamProvider, toolDefs []llm.ToolDef, handler StepHandler) error {
+func (a *Agent) stepStream(ctx context.Context, sp llm.StreamProvider, toolDefs []llm.ToolDef, handler StepHandler, round int) error {
+	handler.OnLLMRequest(round, a.memory.Len(), len(toolDefs))
 	ch, err := sp.StreamChat(ctx, a.memory.All(), toolDefs)
 	if err != nil {
 		handler.OnError(err)
@@ -421,17 +429,18 @@ func (a *Agent) stepStream(ctx context.Context, sp llm.StreamProvider, toolDefs 
 		ToolCalls:        finalCalls,
 	})
 
+	handler.OnLLMResponse(round, usage, latency, len(finalCalls))
 	// Execute tool calls if any.
 	if len(finalCalls) > 0 {
 		a.executeToolCalls(ctx, finalCalls, handler)
 	}
-
 	handler.OnDone(usage, latency)
 	return nil
 }
 
 // stepSync performs one LLM call without streaming (fallback path).
-func (a *Agent) stepSync(ctx context.Context, toolDefs []llm.ToolDef, handler StepHandler) error {
+func (a *Agent) stepSync(ctx context.Context, toolDefs []llm.ToolDef, handler StepHandler, round int) error {
+	handler.OnLLMRequest(round, a.memory.Len(), len(toolDefs))
 	resp, err := a.provider.Chat(ctx, a.memory.All(), toolDefs)
 	if err != nil {
 		handler.OnError(err)
@@ -452,10 +461,10 @@ func (a *Agent) stepSync(ctx context.Context, toolDefs []llm.ToolDef, handler St
 		ToolCalls:        resp.ToolCalls,
 	})
 
+	handler.OnLLMResponse(round, resp.Usage, resp.Latency, len(resp.ToolCalls))
 	if len(resp.ToolCalls) > 0 {
 		a.executeToolCalls(ctx, resp.ToolCalls, handler)
 	}
-
 	handler.OnDone(resp.Usage, resp.Latency)
 	return nil
 }

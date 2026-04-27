@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/longway/sisyphus/internal/llm"
+	"github.com/longway/sisyphus/internal/trace"
 )
 
 // ANSI color codes.
@@ -29,18 +30,25 @@ type Renderer struct {
 	w          io.Writer
 	useColor   bool
 	verbose    bool // show full thinking content
+	traceRaw   bool
+	traceJSON  bool
 	mu         sync.Mutex
 	inThinking bool // currently streaming thinking content
 	inContent  bool // currently streaming content
+	thinking   strings.Builder
+	turnID     int
+	step       int
 }
 
 // NewRenderer creates a new Renderer.
 // If useColor is true, ANSI escape codes are emitted.
-func NewRenderer(w io.Writer, useColor bool, verbose bool) *Renderer {
+func NewRenderer(w io.Writer, useColor bool, verbose bool, traceRaw bool, traceJSON bool) *Renderer {
 	return &Renderer{
-		w:        w,
-		useColor: useColor,
-		verbose:  verbose,
+		w:         w,
+		useColor:  useColor,
+		verbose:   verbose,
+		traceRaw:  traceRaw,
+		traceJSON: traceJSON,
 	}
 }
 
@@ -60,26 +68,66 @@ func (r *Renderer) Verbose() bool {
 
 // --- StepHandler implementation ---
 
+// OnTurnStart renders a structured trace event for a new user turn.
+func (r *Renderer) OnTurnStart(input string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.turnID++
+	r.step = 0
+	r.inThinking = false
+	r.inContent = false
+	r.thinking.Reset()
+	r.traceLine("INFO", "turn.start",
+		trace.F("turn", r.turnID),
+		trace.F("input_chars", len(input)),
+		trace.F("input", trace.Truncate(input, 120)),
+	)
+}
+
+// OnLLMRequest renders a structured trace event before a model request.
+func (r *Renderer) OnLLMRequest(round int, messages int, tools int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.traceLine("DEBU", "llm.request",
+		trace.F("turn", r.turnID),
+		trace.F("round", round),
+		trace.F("messages", messages),
+		trace.F("tools", tools),
+	)
+}
+
+// OnLLMResponse renders model response metadata.
+func (r *Renderer) OnLLMResponse(round int, usage llm.Usage, latency time.Duration, toolCalls int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.traceLine("DEBU", "llm.response",
+		trace.F("turn", r.turnID),
+		trace.F("round", round),
+		trace.F("tool_calls", toolCalls),
+		trace.F("latency_ms", latency.Milliseconds()),
+		trace.F("tokens_in", usage.PromptTokens),
+		trace.F("tokens_out", usage.CompletionTokens),
+		trace.F("tokens_total", usage.TotalTokens),
+	)
+}
+
 // OnThinking renders incremental thinking/reasoning content.
 func (r *Renderer) OnThinking(delta string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if !r.verbose {
-		// In non-verbose mode, show a minimal indicator on the first chunk.
-		if !r.inThinking {
-			r.inThinking = true
-			r.write(r.color(colorGray, "  [thinking...] "))
-		}
-		return
-	}
-
-	// Verbose: stream thinking content in gray.
+	r.thinking.WriteString(delta)
 	if !r.inThinking {
 		r.inThinking = true
-		r.write(r.color(colorGray, "  💭 "))
+		r.traceLine("DEBU", "llm.thinking.start",
+			trace.F("turn", r.turnID),
+			trace.F("raw", r.traceRaw || r.verbose),
+		)
+		return
 	}
-	r.write(r.color(colorGray, delta))
 }
 
 // OnContent renders incremental content from the assistant.
@@ -87,11 +135,7 @@ func (r *Renderer) OnContent(delta string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Close thinking line if needed.
-	if r.inThinking {
-		r.inThinking = false
-		r.write("\n")
-	}
+	r.finishThinking("before_content")
 
 	if !r.inContent {
 		r.inContent = true
@@ -105,14 +149,14 @@ func (r *Renderer) OnToolCall(name string, args string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.finishStreaming()
-	r.write(r.color(colorYellow, fmt.Sprintf("  ⟶ %s", name)))
-	// Show args on the same line, truncated.
-	display := args
-	if len(display) > 120 {
-		display = display[:120] + "..."
-	}
-	r.write(r.color(colorGray, fmt.Sprintf(" %s\n", display)))
+	r.finishStreaming("before_tool_call")
+	r.step++
+	r.traceLine("INFO", "tool.call",
+		trace.F("turn", r.turnID),
+		trace.F("step", r.step),
+		trace.F("name", name),
+		trace.F("args", trace.Truncate(args, 300)),
+	)
 }
 
 // OnToolResult shows the result of a tool invocation.
@@ -120,14 +164,20 @@ func (r *Renderer) OnToolResult(name string, result string, elapsed time.Duratio
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Truncate long results for display.
-	display := result
-	lines := strings.Split(display, "\n")
-	if len(lines) > 15 {
-		display = strings.Join(lines[:15], "\n") + fmt.Sprintf("\n    ... (%d more lines)", len(lines)-15)
+	lineCount := 0
+	if result != "" {
+		lineCount = len(strings.Split(result, "\n"))
 	}
-
-	r.write(r.color(colorGray, fmt.Sprintf("    (%s) %s\n", elapsed.Round(time.Millisecond), display)))
+	r.traceLine("INFO", "tool.result",
+		trace.F("turn", r.turnID),
+		trace.F("step", r.step),
+		trace.F("name", name),
+		trace.F("status", statusFromResult(result)),
+		trace.F("elapsed_ms", elapsed.Milliseconds()),
+		trace.F("bytes", len(result)),
+		trace.F("lines", lineCount),
+		trace.F("preview", trace.Truncate(oneLine(result), 300)),
+	)
 }
 
 // OnError shows an error message.
@@ -135,8 +185,11 @@ func (r *Renderer) OnError(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.finishStreaming()
-	r.write(r.color(colorRed, fmt.Sprintf("  ✗ error: %v\n", err)))
+	r.finishStreaming("before_error")
+	r.traceLine("ERRO", "step.error",
+		trace.F("turn", r.turnID),
+		trace.F("error", err.Error()),
+	)
 }
 
 // OnDone is called when a step completes.
@@ -144,15 +197,15 @@ func (r *Renderer) OnDone(usage llm.Usage, latency time.Duration) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.finishStreaming()
+	r.finishStreaming("done")
 
-	if r.verbose && usage.TotalTokens > 0 {
-		r.write(r.color(colorGray, fmt.Sprintf(
-			"\n  [tokens: %d in / %d out / %d total | %s]\n",
-			usage.PromptTokens, usage.CompletionTokens, usage.TotalTokens,
-			latency.Round(time.Millisecond),
-		)))
-	}
+	r.traceLine("DEBU", "turn.checkpoint",
+		trace.F("turn", r.turnID),
+		trace.F("latency_ms", latency.Milliseconds()),
+		trace.F("tokens_in", usage.PromptTokens),
+		trace.F("tokens_out", usage.CompletionTokens),
+		trace.F("tokens_total", usage.TotalTokens),
+	)
 }
 
 // Prompt prints the input prompt.
@@ -197,12 +250,71 @@ func (r *Renderer) Error(msg string) {
 // --- internal helpers ---
 
 // finishStreaming closes any open streaming indicators.
-func (r *Renderer) finishStreaming() {
-	if r.inThinking || r.inContent {
-		r.inThinking = false
+func (r *Renderer) finishStreaming(reason string) {
+	r.finishThinking(reason)
+	if r.inContent {
 		r.inContent = false
 		r.write("\n")
 	}
+}
+
+func (r *Renderer) finishThinking(reason string) {
+	if !r.inThinking && r.thinking.Len() == 0 {
+		return
+	}
+	text := r.thinking.String()
+	fields := []trace.Field{
+		trace.F("turn", r.turnID),
+		trace.F("reason", reason),
+		trace.F("chars", len(text)),
+	}
+	if r.traceRaw || r.verbose {
+		fields = append(fields, trace.F("text", trace.Truncate(text, rawTraceLimit(r.traceRaw))))
+	}
+	r.traceLine("DEBU", "llm.thinking.done", fields...)
+	r.inThinking = false
+	r.thinking.Reset()
+}
+
+func (r *Renderer) traceLine(level string, event string, fields ...trace.Field) {
+	line := trace.Line(level, "trace", event, fields...)
+	if r.traceJSON {
+		line = trace.JSONLine(level, "trace", event, fields...)
+	}
+	switch level {
+	case "ERRO", "ERROR":
+		r.write(r.color(colorRed, "  "+line+"\n"))
+	case "WARN":
+		r.write(r.color(colorYellow, "  "+line+"\n"))
+	case "DEBU", "DEBUG":
+		if r.verbose || r.traceRaw || r.traceJSON {
+			r.write(r.color(colorGray, "  "+line+"\n"))
+		}
+	default:
+		r.write(r.color(colorGray, "  "+line+"\n"))
+	}
+}
+
+func rawTraceLimit(raw bool) int {
+	if raw {
+		return 8000
+	}
+	return 800
+}
+
+func statusFromResult(result string) string {
+	if strings.HasPrefix(strings.TrimSpace(strings.ToLower(result)), "error:") {
+		return "error"
+	}
+	return "ok"
+}
+
+func oneLine(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.Join(strings.Fields(s), " ")
+	return s
 }
 
 func (r *Renderer) write(s string) {

@@ -10,6 +10,8 @@
 //	--session      Restore a saved interactive session
 //	--config       Path to config file (overrides XDG search)
 //	--debug        Print verbose debug output
+//	--trace-raw    Include raw model reasoning in REPL trace output
+//	--trace-json   Emit REPL trace events as JSONL
 //
 // Modes:
 //
@@ -35,7 +37,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"sort"
@@ -45,6 +46,7 @@ import (
 
 	"github.com/longway/sisyphus/internal/agent"
 	"github.com/longway/sisyphus/internal/llm"
+	"github.com/longway/sisyphus/internal/logger"
 	"github.com/longway/sisyphus/internal/mcp"
 	"github.com/longway/sisyphus/internal/repl"
 	"github.com/longway/sisyphus/internal/task"
@@ -59,7 +61,12 @@ func main() {
 	session := flag.String("session", "", "Restore a saved interactive session by ID")
 	configPath := flag.String("config", "", "Config file path")
 	debug := flag.Bool("debug", false, "Print tool call arguments, results, and model reasoning")
+	traceRaw := flag.Bool("trace-raw", false, "Include raw model reasoning in REPL trace output")
+	traceJSON := flag.Bool("trace-json", false, "Emit REPL trace events as JSONL")
 	flag.Parse()
+
+	// Logger
+	log := logger.New("main", *debug)
 
 	// Load configuration
 	if *configPath != "" {
@@ -67,15 +74,15 @@ func main() {
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("sisyphus: config: %v", err)
+		log.Fatalf("config: %v", err)
 	}
-	logConfigSummary(cfg)
+	logConfigSummary(log, cfg)
 
-	log.Printf("sisyphus: starting (model=%s, maxSteps=%d, workers=%d)",
+	log.Info("starting (model=%s, maxSteps=%d, workers=%d)",
 		cfg.LLM.Model, cfg.Agent.MaxSteps, cfg.Queue.Workers)
 
 	if cfg.LLM.APIKey == "" {
-		log.Fatal("sisyphus: no API key configured. Set OPENAI_API_KEY or llm.api_key in config")
+		log.Fatal("no API key configured. Set OPENAI_API_KEY or llm.api_key in config")
 	}
 
 	// Create signal-aware context
@@ -86,7 +93,7 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		sig := <-sigCh
-		log.Printf("sisyphus: received %v, shutting down gracefully", sig)
+		log.Info("received %v, shutting down gracefully", sig)
 		cancel()
 	}()
 
@@ -103,22 +110,22 @@ func main() {
 	switch cfg.LLM.Provider {
 	case "deepseek":
 		provider = llm.NewDeepSeek(providerCfg)
-		log.Printf("sisyphus: using DeepSeek provider")
+		log.Info("using DeepSeek provider")
 	default:
 		provider = llm.NewOpenAI(providerCfg)
-		log.Printf("sisyphus: using OpenAI provider")
+		log.Info("using OpenAI provider")
 	}
 
 	registry := tool.NewRegistry()
 	registerBuiltins(registry, cfg)
 	mcpManager, err := mcp.StartConfigured(ctx, cfg.MCP, registry)
 	if err != nil {
-		log.Printf("sisyphus: MCP startup warning: %v", err)
+		log.Warn("MCP startup: %v", err)
 	}
-	logToolSummary(registry, *debug)
+	logToolSummary(log, registry, *debug)
 	defer func() {
 		if err := mcpManager.Close(); err != nil {
-			log.Printf("sisyphus: MCP shutdown warning: %v", err)
+			log.Warn("MCP shutdown: %v", err)
 		}
 	}()
 
@@ -134,9 +141,9 @@ func main() {
 	if *instruction != "" {
 		t := task.New(newTaskID(), *instruction)
 		if !queue.Submit(t) {
-			log.Fatal("sisyphus: queue is full")
+			log.Fatal("queue is full")
 		}
-		log.Printf("sisyphus: submitted task %s: %s", t.ID, *instruction)
+		log.Info("submitted task %s: %s", t.ID, *instruction)
 
 		// Wait for task to complete
 		for {
@@ -145,17 +152,17 @@ func main() {
 			}
 			select {
 			case <-ctx.Done():
-				log.Printf("sisyphus: shutdown while waiting for task %s", t.ID)
+				log.Warn("shutdown while waiting for task %s", t.ID)
 				return
 			case <-time.After(500 * time.Millisecond):
 			}
 		}
 
 		if t.Status == task.StatusCompleted {
-			log.Printf("sisyphus: task %s completed (%d steps)", t.ID, t.Steps)
+			log.Info("task %s completed (%d steps)", t.ID, t.Steps)
 			fmt.Println(t.Result)
 		} else {
-			log.Printf("sisyphus: task %s failed: %s", t.ID, t.Error)
+			log.Error("task %s failed: %s", t.ID, t.Error)
 			os.Exit(1)
 		}
 
@@ -172,26 +179,29 @@ func main() {
 		Cfg:       cfg,
 		SessionID: *session,
 		Debug:     *debug,
+		TraceRaw:  *traceRaw,
+		TraceJSON: *traceJSON,
 	})
 	if err != nil {
-		log.Fatalf("sisyphus: repl: %v", err)
+		log.Fatalf("repl: %v", err)
 	}
 	if err := r.Run(ctx); err != nil {
-		log.Printf("sisyphus: repl exited: %v", err)
+		log.Error("repl exited: %v", err)
 	}
 	queue.Close()
-	log.Println("sisyphus: shutdown complete")
+	log.Info("shutdown complete")
 }
 
 // worker processes tasks from the queue.
 func worker(ctx context.Context, id int, provider llm.Provider, registry *tool.Registry, maxSteps int, memCfg config.MemoryConfig, debug bool, queue *task.Queue) {
-	log.Printf("sisyphus: worker %d started", id)
+	wlog := logger.New("worker", debug)
+	wlog.Debug("worker %d started", id)
 	for t := range queue.Chan() {
 		queue.Track(t)
 		agent.RunTask(ctx, provider, registry, t, maxSteps, memCfg, debug)
 		queue.Untrack(t)
 	}
-	log.Printf("sisyphus: worker %d stopped", id)
+	wlog.Debug("worker %d stopped", id)
 }
 
 // registerBuiltins registers the standard built-in tools.
@@ -216,21 +226,24 @@ func registerBuiltin(r *tool.Registry, cfg *config.Config, t tool.Tool) {
 		return
 	}
 	if err := r.RegisterWithSource(t, tool.Source{Kind: "builtin"}); err != nil {
-		log.Printf("sisyphus: builtin tool %s skipped: %v", t.Name(), err)
+		// Use a temporary logger here since we don't have one in scope.
+		// This is called during startup from main() which has its own logger.
+		l := logger.New("main", false)
+		l.Warn("builtin tool %s skipped: %v", t.Name(), err)
 	}
 }
 
-func logConfigSummary(cfg *config.Config) {
+func logConfigSummary(l *logger.Logger, cfg *config.Config) {
 	if cfg.Path == "" {
-		log.Printf("sisyphus: config loaded from defaults (no config file found)")
+		l.Info("config loaded from defaults (no config file found)")
 	} else {
-		log.Printf("sisyphus: config loaded from %s", cfg.Path)
+		l.Info("config loaded from %s", cfg.Path)
 	}
 
 	if len(cfg.Tools.Enabled) == 0 {
-		log.Printf("sisyphus: builtin tools policy: enabled=all disabled=[%s]", strings.Join(cfg.Tools.Disabled, ", "))
+		l.Info("builtin tools policy: enabled=all disabled=[%s]", strings.Join(cfg.Tools.Disabled, ", "))
 	} else {
-		log.Printf("sisyphus: builtin tools policy: enabled=[%s] disabled=[%s]",
+		l.Info("builtin tools policy: enabled=[%s] disabled=[%s]",
 			strings.Join(cfg.Tools.Enabled, ", "), strings.Join(cfg.Tools.Disabled, ", "))
 	}
 
@@ -245,11 +258,11 @@ func logConfigSummary(cfg *config.Config) {
 	}
 	sort.Strings(enabled)
 	sort.Strings(disabled)
-	log.Printf("sisyphus: MCP servers configured=%d enabled=[%s] disabled=[%s]",
+	l.Info("MCP servers configured=%d enabled=[%s] disabled=[%s]",
 		len(cfg.MCP), strings.Join(enabled, ", "), strings.Join(disabled, ", "))
 }
 
-func logToolSummary(r *tool.Registry, verbose bool) {
+func logToolSummary(l *logger.Logger, r *tool.Registry, verbose bool) {
 	counts := make(map[string]int)
 	names := make(map[string][]string)
 	for _, entry := range r.Entries() {
@@ -274,14 +287,14 @@ func logToolSummary(r *tool.Registry, verbose bool) {
 	for _, key := range keys {
 		parts = append(parts, fmt.Sprintf("%s=%d", key, counts[key]))
 	}
-	log.Printf("sisyphus: registered tools: %s", strings.Join(parts, ", "))
+	l.Info("registered tools: %s", strings.Join(parts, ", "))
 
 	if !verbose {
 		return
 	}
 	for _, key := range keys {
 		sort.Strings(names[key])
-		log.Printf("sisyphus: registered tools [%s]: [%s]", key, strings.Join(names[key], ", "))
+		l.Debug("registered tools [%s]: [%s]", key, strings.Join(names[key], ", "))
 	}
 }
 
