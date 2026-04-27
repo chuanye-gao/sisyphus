@@ -1,0 +1,51 @@
+<svg width="1920" height="869" viewBox="0 0 1920 869" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1920" height="869" fill="#fbf8ef"/>
+  <rect width="335" height="869" fill="#14283a"/>
+  <rect x="335" y="0" width="1585" height="72" fill="#fbf8ef"/>
+  <line x1="335" y1="72" x2="1920" y2="72" stroke="#ddd7ca"/>
+  <circle cx="49" cy="50" r="27" fill="#fff8ec"/>
+  <circle cx="49" cy="50" r="20" fill="#e7d4b5"/>
+  <path d="M34 57C42 36 64 31 68 48C58 47 51 55 47 66C42 63 38 61 34 57Z" fill="#26384a"/>
+  <text x="90" y="48" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">Sisyphus</text>
+  <text x="90" y="72" font-family="Segoe UI, Arial, sans-serif" font-size="16" fill="#d9e7f2">deepseek-v4-pro</text>
+  <rect x="23" y="105" width="289" height="51" rx="14" fill="#26394b" stroke="#435467"/>
+  <text x="42" y="138" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="600" fill="#ffffff">New chat</text>
+  <text x="23" y="195" font-family="Segoe UI, Arial, sans-serif" font-size="14" font-weight="700" fill="#b9c4cd">SESSIONS</text>
+  <rect x="23" y="213" width="284" height="70" rx="11" fill="#454638"/>
+  <text x="37" y="243" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="700" fill="#ffffff">你好，先介绍一下你自己?</text>
+  <text x="37" y="267" font-family="Segoe UI, Arial, sans-serif" font-size="14" fill="#c3c9c8">2 messages</text>
+  <text x="23" y="776" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#dce7ef">session-20260427-235246</text>
+  <text x="23" y="810" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#dce7ef">3 messages</text>
+  <text x="23" y="841" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#dce7ef">646 tokens</text>
+  <text x="365" y="43" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="700" fill="#111827">Sisyphus</text>
+  <circle cx="1832" cy="36" r="12" fill="#f3ead8"/>
+  <circle cx="1832" cy="36" r="6" fill="#d49b35"/>
+  <text x="1848" y="42" font-family="Segoe UI, Arial, sans-serif" font-size="15" fill="#706a60">Ready</text>
+  <rect x="1909" y="124" width="7" height="612" rx="3.5" fill="#8d8d8d"/>
+  <circle cx="604" cy="92" r="21" fill="#a37339"/>
+  <text x="599" y="99" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#ffffff">U</text>
+  <text x="642" y="92" font-family="Segoe UI, Arial, sans-serif" font-size="15" font-weight="700" fill="#0f172a">You</text>
+  <rect x="642" y="104" width="265" height="62" rx="22" fill="#f3dfbd" stroke="#dcc49e"/>
+  <text x="663" y="143" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#111827">你好，先介绍一下你自己?</text>
+  <circle cx="605" cy="217" r="21" fill="#fffaf0" stroke="#ded7ca"/>
+  <circle cx="605" cy="217" r="15" fill="#e7d4b5"/>
+  <path d="M595 223C601 207 618 203 621 216C614 215 609 221 606 229C602 227 599 225 595 223Z" fill="#26384a"/>
+  <text x="642" y="218" font-family="Segoe UI, Arial, sans-serif" font-size="16" font-weight="700" fill="#0f172a">Sisyphus</text>
+  <text x="642" y="254" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#111827">你好！我是 <tspan font-weight="700">Sisyphus</tspan>，一个专为日常程序员工作设计的小型 CLI 编码助手。</text>
+  <text x="642" y="312" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#111827">我的工作方式很简单：</text>
+  <text x="642" y="371" font-family="Segoe UI, Arial, sans-serif" font-size="19" fill="#111827">- <tspan font-weight="700">先检查，再编辑</tspan> -- 我会先阅读代码、搜索符号、理解项目结构，然后才做修改。</text>
+  <text x="642" y="402" font-family="Segoe UI, Arial, sans-serif" font-size="19" fill="#111827">- <tspan font-weight="700">小步修改</tspan> -- 我偏好精准的局部编辑，而不是大范围重写。</text>
+  <text x="642" y="433" font-family="Segoe UI, Arial, sans-serif" font-size="19" fill="#111827">- <tspan font-weight="700">每次修改后验证</tspan> -- 用最小的命令确认改动有效。</text>
+  <text x="642" y="464" font-family="Segoe UI, Arial, sans-serif" font-size="19" fill="#111827">- <tspan font-weight="700">遇到问题就调整</tspan> -- 读取错误信息，调整策略，再试一次。</text>
+  <text x="642" y="528" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#111827">我擅长的任务包括：</text>
+  <text x="642" y="558" font-family="Segoe UI, Arial, sans-serif" font-size="19" fill="#111827">- 探索代码库：梳理项目结构，找到相关文件和符号</text>
+  <text x="642" y="588" font-family="Segoe UI, Arial, sans-serif" font-size="19" fill="#111827">- 修复 bug：复现问题，定位原因，精准修复</text>
+  <text x="642" y="618" font-family="Segoe UI, Arial, sans-serif" font-size="19" fill="#111827">- 排查测试失败：分析失败输出，找到代码与测试的关联</text>
+  <text x="642" y="681" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#111827">目前我在 <tspan font-weight="700">Windows</tspan> 环境下运行。有什么我可以帮你的？</text>
+  <rect x="591" y="767" width="1074" height="74" rx="29" fill="#ffffff" stroke="#dedbd4"/>
+  <text x="611" y="812" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#98938a">Message Sisyphus</text>
+  <circle cx="1571" cy="805" r="24" fill="#f2f1ed"/>
+  <text x="1565" y="811" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="700" fill="#8c8b85">x</text>
+  <circle cx="1628" cy="805" r="24" fill="#13283b"/>
+  <text x="1621" y="812" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">&gt;</text>
+</svg>

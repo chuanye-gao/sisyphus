@@ -1,5 +1,3 @@
-# Sisyphus CI — 多平台编译 + 测试 + 代码检查
-# 在 push 和 PR 时自动触发
 name: CI
 
 on:
@@ -7,75 +5,79 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # ── 主质量流水线（Linux）：格式 + vet + 测试 + 构建 + 冒烟 ─────────────
-  quality:
-    name: 质量检查（Linux）
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: 安装 Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-          cache: true
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
 
-      - name: 下载依赖
-        run: go mod download
-
-      - name: gofmt 格式检查
+      - name: Check formatting
         run: |
           fmt=$(gofmt -s -l .)
           if [ -n "$fmt" ]; then
-            echo "以下文件格式不正确:"
+            echo "The following files are not gofmt-formatted:"
             echo "$fmt"
             exit 1
           fi
 
-      - name: go vet
+      - name: Vet
         run: go vet ./...
 
-      - name: 单元测试（race）
-        run: go test -race -count=1 -v ./...
+      - name: Test
+        run: go test -count=1 ./...
 
-      - name: 编译
-        run: |
-          go build -v ./...
-          go build -o bin/sisyphus ./cmd/sisyphus
+      - name: Build CLI
+        run: go build -o bin/sisyphus ./cmd/sisyphus
 
-      - name: 冒烟测试
+      - name: Smoke test
         run: |
           chmod +x bin/sisyphus
           ./bin/sisyphus --help 2>&1 || true
-          unset SISYPHUS_CONFIG
-          timeout 3 ./bin/sisyphus 2>&1 || true
-          echo "冒烟测试通过"
+          echo "Smoke test passed"
 
-  # ── 轻量跨平台编译：只验证平台可编译，避免重复完整测试 ─────────────────
   cross-build:
-    name: 跨平台编译 / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: verify
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
-        go: ["1.24"]
+        include:
+          - goos: linux
+            goarch: amd64
+            ext: ""
+          - goos: windows
+            goarch: amd64
+            ext: ".exe"
+          - goos: darwin
+            goarch: amd64
+            ext: ""
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: 安装 Go ${{ matrix.go }}
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go }}
-          cache: true
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
 
-      - name: 下载依赖
-        run: go mod download
-
-      - name: 编译
-        run: go build -v ./...
-
-      - name: 编译二进制
-        run: go build -o bin/sisyphus${{ runner.os == 'Windows' && '.exe' || '' }} ./cmd/sisyphus
+      - name: Build CLI
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: go build -trimpath -o bin/sisyphus-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/sisyphus

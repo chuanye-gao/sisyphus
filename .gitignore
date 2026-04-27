@@ -10,6 +10,9 @@ sisyphus.exe
 vendor/
 *.prof
 
+# Local frontend workspace
+web/
+
 # IDE
 .idea/
 .vscode/

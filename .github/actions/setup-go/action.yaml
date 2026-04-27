@@ -1,0 +1,14 @@
+name: Setup Go
+description: Install Go, restore the module cache, and download dependencies.
+runs:
+  using: composite
+  steps:
+    - name: Install Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: ${{ github.workspace }}/go.mod
+        cache: true
+
+    - name: Download dependencies
+      shell: bash
+      run: go mod download

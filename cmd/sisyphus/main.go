@@ -3,6 +3,7 @@
 // Usage:
 //
 //	sisyphus [flags]
+//	sisyphus web [--addr 127.0.0.1:7357]
 //
 // Flags:
 //
@@ -17,6 +18,7 @@
 //
 //	With --instruction: single-shot mode (run one task, exit)
 //	Without --instruction: interactive REPL mode
+//	With web: local browser UI mode
 //
 // Environment:
 //
@@ -37,6 +39,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"sort"
@@ -52,25 +55,48 @@ import (
 	"github.com/longway/sisyphus/internal/task"
 	"github.com/longway/sisyphus/internal/tool"
 	"github.com/longway/sisyphus/internal/tool/builtin"
+	webui "github.com/longway/sisyphus/internal/webui"
 	"github.com/longway/sisyphus/pkg/config"
 )
 
+const defaultWebAddr = "127.0.0.1:7357"
+
 func main() {
-	// Parse flags
-	instruction := flag.String("instruction", "", "Task instruction to run (single-shot mode)")
-	session := flag.String("session", "", "Restore a saved interactive session by ID")
-	configPath := flag.String("config", "", "Config file path")
-	debug := flag.Bool("debug", false, "Print tool call arguments, results, and model reasoning")
-	traceRaw := flag.Bool("trace-raw", false, "Include raw model reasoning in REPL trace output")
-	traceJSON := flag.Bool("trace-json", false, "Emit REPL trace events as JSONL")
-	flag.Parse()
+	var (
+		instruction string
+		session     string
+		configPath  string
+		debug       bool
+		traceRaw    bool
+		traceJSON   bool
+		webMode     bool
+		webAddr     = defaultWebAddr
+	)
+
+	if len(os.Args) > 1 && os.Args[1] == "web" {
+		webMode = true
+		webFlags := flag.NewFlagSet("web", flag.ExitOnError)
+		webFlags.StringVar(&webAddr, "addr", defaultWebAddr, "Address for the local web UI")
+		webFlags.StringVar(&session, "session", "", "Restore a saved interactive session by ID")
+		webFlags.StringVar(&configPath, "config", "", "Config file path")
+		webFlags.BoolVar(&debug, "debug", false, "Print tool call arguments, results, and model reasoning")
+		webFlags.Parse(os.Args[2:])
+	} else {
+		flag.StringVar(&instruction, "instruction", "", "Task instruction to run (single-shot mode)")
+		flag.StringVar(&session, "session", "", "Restore a saved interactive session by ID")
+		flag.StringVar(&configPath, "config", "", "Config file path")
+		flag.BoolVar(&debug, "debug", false, "Print tool call arguments, results, and model reasoning")
+		flag.BoolVar(&traceRaw, "trace-raw", false, "Include raw model reasoning in REPL trace output")
+		flag.BoolVar(&traceJSON, "trace-json", false, "Emit REPL trace events as JSONL")
+		flag.Parse()
+	}
 
 	// Logger
-	log := logger.New("main", *debug)
+	log := logger.New("main", debug)
 
 	// Load configuration
-	if *configPath != "" {
-		os.Setenv("SISYPHUS_CONFIG", *configPath)
+	if configPath != "" {
+		os.Setenv("SISYPHUS_CONFIG", configPath)
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -118,11 +144,49 @@ func main() {
 
 	registry := tool.NewRegistry()
 	registerBuiltins(registry, cfg)
+
+	if webMode {
+		logToolSummary(log, registry, debug)
+		startMCPAsync(ctx, log, cfg, registry, debug)
+
+		srv, err := webui.New(webui.Config{
+			Provider:  provider,
+			Registry:  registry,
+			Cfg:       cfg,
+			SessionID: session,
+			Debug:     debug,
+		})
+		if err != nil {
+			log.Fatalf("web: %v", err)
+		}
+
+		httpServer := &http.Server{
+			Addr:              webAddr,
+			Handler:           srv.Handler(),
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		go func() {
+			<-ctx.Done()
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			if err := httpServer.Shutdown(shutdownCtx); err != nil {
+				log.Warn("web shutdown: %v", err)
+			}
+		}()
+
+		log.Info("web UI listening on http://%s", webAddr)
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("web: %v", err)
+		}
+		log.Info("shutdown complete")
+		return
+	}
+
 	mcpManager, err := mcp.StartConfigured(ctx, cfg.MCP, registry)
 	if err != nil {
 		log.Warn("MCP startup: %v", err)
 	}
-	logToolSummary(log, registry, *debug)
+	logToolSummary(log, registry, debug)
 	defer func() {
 		if err := mcpManager.Close(); err != nil {
 			log.Warn("MCP shutdown: %v", err)
@@ -134,16 +198,16 @@ func main() {
 
 	// Launch workers
 	for i := 0; i < cfg.Queue.Workers; i++ {
-		go worker(ctx, i, provider, registry, cfg.Agent.MaxSteps, cfg.Memory, *debug, queue)
+		go worker(ctx, i, provider, registry, cfg.Agent.MaxSteps, cfg.Memory, debug, queue)
 	}
 
 	// Single-shot mode: submit the instruction as a task
-	if *instruction != "" {
-		t := task.New(newTaskID(), *instruction)
+	if instruction != "" {
+		t := task.New(newTaskID(), instruction)
 		if !queue.Submit(t) {
 			log.Fatal("queue is full")
 		}
-		log.Info("submitted task %s: %s", t.ID, *instruction)
+		log.Info("submitted task %s: %s", t.ID, instruction)
 
 		// Wait for task to complete
 		for {
@@ -177,10 +241,10 @@ func main() {
 		Provider:  provider,
 		Registry:  registry,
 		Cfg:       cfg,
-		SessionID: *session,
-		Debug:     *debug,
-		TraceRaw:  *traceRaw,
-		TraceJSON: *traceJSON,
+		SessionID: session,
+		Debug:     debug,
+		TraceRaw:  traceRaw,
+		TraceJSON: traceJSON,
 	})
 	if err != nil {
 		log.Fatalf("repl: %v", err)
@@ -202,6 +266,21 @@ func worker(ctx context.Context, id int, provider llm.Provider, registry *tool.R
 		queue.Untrack(t)
 	}
 	wlog.Debug("worker %d stopped", id)
+}
+
+func startMCPAsync(ctx context.Context, log *logger.Logger, cfg *config.Config, registry *tool.Registry, debug bool) {
+	go func() {
+		manager, err := mcp.StartConfigured(ctx, cfg.MCP, registry)
+		if err != nil {
+			log.Warn("MCP startup: %v", err)
+		}
+		logToolSummary(log, registry, debug)
+
+		<-ctx.Done()
+		if err := manager.Close(); err != nil {
+			log.Warn("MCP shutdown: %v", err)
+		}
+	}()
 }
 
 // registerBuiltins registers the standard built-in tools.

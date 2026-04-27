@@ -333,6 +333,9 @@ func applyEnvOverrides(cfg *Config) {
 
 // DataDir 返回平台适配的 Sisyphus 数据目录。
 func DataDir() string {
+	if dir := os.Getenv("SISYPHUS_DATA_DIR"); dir != "" {
+		return dir
+	}
 	if runtime.GOOS == "windows" {
 		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
 			return filepath.Join(localAppData, "sisyphus")
